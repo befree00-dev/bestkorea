@@ -1,4 +1,4 @@
-# 로컬 테스트용: 웹 + 수집기 + PostgreSQL
+# 로컬 테스트용: 웹 + 수집기(수집함에 쌓기) + PostgreSQL
 #   docker compose up -d --build      → http://localhost:8000
 # 설정은 같은 폴더의 .env 파일 값이 있으면 그 값을, 없으면 아래 기본값을 사용합니다.
 name: bestkorea
@@ -21,9 +21,13 @@ x-app-env: &app-env
   COLLECT_MAX_PER_RUN: ${COLLECT_MAX_PER_RUN:-40}
   REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
   REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
-  TRANSLATE_ENABLED: ${TRANSLATE_ENABLED:-false}
+  MIN_COMMENTS: ${MIN_COMMENTS:-10}
+  COMMENTS_PER_ITEM: ${COMMENTS_PER_ITEM:-50}
+  # 수집함 '번역' 버튼 (Claude API)
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
   ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
+  ANTHROPIC_EFFORT: ${ANTHROPIC_EFFORT:-low}
+  SUMMARY_MAX_CHARS: ${SUMMARY_MAX_CHARS:-500}
 
 services:
   db:

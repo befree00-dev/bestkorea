@@ -1,10 +1,10 @@
 import re
 
 from flask_wtf import FlaskForm
-from wtforms import BooleanField, PasswordField, SelectField, StringField, TextAreaField, URLField
+from wtforms import BooleanField, HiddenField, PasswordField, SelectField, StringField, TextAreaField, URLField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional, URL, ValidationError
 
-from .constants import BOARDS, COUNTRIES
+from .constants import COUNTRIES
 from .models import User
 
 
@@ -35,13 +35,22 @@ class LoginForm(FlaskForm):
 
 
 class PostForm(FlaskForm):
-    board = SelectField("게시판", choices=[(k, v[0]) for k, v in BOARDS.items()])
+    board = SelectField("게시판", choices=[])  # 등급에 따라 뷰에서 채움
     title = StringField("제목", validators=[DataRequired(), Length(2, 200)])
     body = TextAreaField("내용", validators=[DataRequired(), Length(2, 20000)])
-    source_url = URLField("원문 링크 (해외 뉴스 제보 시)", validators=[Optional(), URL(), Length(max=2000)])
+    source_url = URLField("원문 링크", validators=[Optional(), URL(), Length(max=2000)])
     country = SelectField(
         "국가/출처", choices=[("", "선택 안 함")] + [(k, f"{v[1]} {v[0]}") for k, v in COUNTRIES.items()],
         validators=[Optional()],
+    )
+    image_url = URLField("대표 이미지 주소", validators=[Optional(), URL(), Length(max=2000)])
+    from_item = HiddenField()
+
+
+class ReporterApplyForm(FlaskForm):
+    message = TextAreaField(
+        "지원 동기와 소개",
+        validators=[DataRequired(), Length(20, 2000, "20자 이상 2000자 이하로 작성해 주세요.")],
     )
 
 

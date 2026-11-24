@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 TIMEOUT = 15
 SUMMARY_LIMIT = 300  # 저작권 보호: 원문 전문이 아닌 짧은 발췌만 저장
-REACTION_LIMIT = 1000
+REACTION_LIMIT = 2000
 
 
 @dataclass
@@ -28,6 +28,7 @@ class Item:
     published_at: datetime | None = None
     image_url: str | None = None
     article_url: str | None = None  # Reddit 글이 링크한 외부 기사
+    num_comments: int = 0
     reactions: list = field(default_factory=list)  # [{"author","body","score"}]
 
 
@@ -130,7 +131,8 @@ def _reddit_image(data):
         return None
 
 
-def fetch_reddit(source, client, limit, reactions_per_post=8, min_score=20):
+def fetch_reddit(source, client, limit, comments_per_item=50, min_comments=10):
+    """댓글이 min_comments 개 이상인 한국 관련 글만, 인기 댓글 최대 comments_per_item 개와 함께 가져온다."""
     if source["mode"] == "search":
         listing = client.get(
             f"/r/{source['sub']}/search.json",
@@ -142,7 +144,7 @@ def fetch_reddit(source, client, limit, reactions_per_post=8, min_score=20):
     items = []
     for child in listing.get("data", {}).get("children", []):
         d = child.get("data", {})
-        if d.get("stickied") or d.get("over_18") or d.get("score", 0) < min_score:
+        if d.get("stickied") or d.get("over_18") or d.get("num_comments", 0) < min_comments:
             continue
         permalink = "https://www.reddit.com" + d["permalink"]
         external = None if d.get("is_self") else (d.get("url_overridden_by_dest") or d.get("url"))
@@ -155,7 +157,7 @@ def fetch_reddit(source, client, limit, reactions_per_post=8, min_score=20):
             url=permalink,
             country="reddit",
             lang="en",
-            summary=clean_text(d.get("selftext"), SUMMARY_LIMIT * 3),
+            summary=clean_text(d.get("selftext"), 5000),
             source_name=f"r/{d.get('subreddit', source['sub'])}",
             category=source.get("category"),
             published_at=datetime.fromtimestamp(d.get("created_utc", time.time()), tz=timezone.utc).replace(
@@ -163,9 +165,10 @@ def fetch_reddit(source, client, limit, reactions_per_post=8, min_score=20):
             ),
             image_url=image,
             article_url=external,
+            num_comments=d.get("num_comments", 0),
         )
         try:
-            item.reactions = fetch_reddit_comments(client, d["subreddit"], d["id"], reactions_per_post)
+            item.reactions = fetch_reddit_comments(client, d["subreddit"], d["id"], comments_per_item)
         except Exception as exc:  # 댓글 실패해도 글은 저장
             log.warning("reddit comments failed for %s: %s", d.get("id"), exc)
         items.append(item)

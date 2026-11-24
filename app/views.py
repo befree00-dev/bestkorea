@@ -4,10 +4,10 @@ from flask import Blueprint, Response, abort, current_app, flash, redirect, rend
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 
-from .constants import BOARDS, COMMUNITY_BOARDS, COUNTRIES, NEWS_BOARDS
+from .constants import BOARDS, COMMUNITY_BOARDS, COUNTRIES, NEWS_BOARDS, ROLE_MEMBER, can_write_board
 from .extensions import db
-from .forms import CommentForm, PostForm
-from .models import Comment, Like, Post, utcnow
+from .forms import CommentForm, PostForm, ReporterApplyForm
+from .models import CollectedItem, Comment, Like, Post, Reaction, ReporterApplication, utcnow
 
 bp = Blueprint("main", __name__)
 
@@ -106,35 +106,88 @@ def post_detail(board, post_id):
     )
 
 
-# ---------------------------------------------------------------- 쓰기/수정/삭제 (회원 전용)
+# ---------------------------------------------------------------- 쓰기/수정/삭제
+# 해외 반응 게시판: 관리자·운영자·기자 / 커뮤니티 게시판: 모든 회원
 def _can_edit(post):
     return current_user.is_authenticated and (current_user.is_admin or post.user_id == current_user.id)
+
+
+def _prepare_form(form):
+    form.board.choices = [(k, v[0]) for k, v in BOARDS.items() if can_write_board(current_user, k)]
+    return form
+
+
+def _prefill_from_item(form, item):
+    """수집함에서 번역한 글로 글쓰기 양식을 채운다."""
+    board = item.category_ko or item.category_hint
+    form.board.data = board if board in NEWS_BOARDS else "fun"
+    form.title.data = item.title_ko or item.title
+    form.body.data = item.summary_ko or item.snippet or ""
+    form.source_url.data = item.url if item.source_type == "reddit" else (item.resolved_url or item.url)
+    form.country.data = item.country
+    form.image_url.data = item.image_url or ""
+    form.from_item.data = str(item.id)
+
+
+def _collected_item_for(form_value):
+    """from_item 값이 있으면 관리자·운영자만 사용할 수 있다."""
+    if not form_value:
+        return None
+    if not current_user.is_staff:
+        abort(403)
+    item = db.session.get(CollectedItem, int(form_value)) if str(form_value).isdigit() else None
+    if item is None:
+        abort(404)
+    return item
+
+
+def _save_news_fields(post, form):
+    if current_user.can_write_news and BOARDS[post.board][1] == "news":
+        post.source_url = (form.source_url.data or "").strip() or None
+        post.country = form.country.data or None
+        post.image_url = (form.image_url.data or "").strip() or None
+    else:
+        post.source_url = post.country = post.image_url = None
 
 
 @bp.route("/write", methods=["GET", "POST"])
 @login_required
 def write():
-    form = PostForm()
-    if request.method == "GET" and request.args.get("board") in BOARDS:
-        form.board.data = request.args["board"]
+    form = _prepare_form(PostForm())
+    item = _collected_item_for(request.values.get("from_item"))
+    if request.method == "GET":
+        if item:
+            _prefill_from_item(form, item)
+        elif request.args.get("board") in dict(form.board.choices):
+            form.board.data = request.args["board"]
+    if not form.board.choices:
+        abort(403)
     if form.validate_on_submit():
-        url = (form.source_url.data or "").strip() or None
-        if url and Post.query.filter_by(source_url=url).first():
-            flash("이미 등록된 원문 링크입니다.", "warning")
-            return render_template("board/write.html", form=form, post=None)
-        post = Post(
-            board=form.board.data,
-            title=form.title.data.strip(),
-            body=form.body.data.strip(),
-            source_url=url,
-            country=form.country.data or None,
-            user_id=current_user.id,
-        )
+        if not can_write_board(current_user, form.board.data):
+            abort(403)
+        post = Post(board=form.board.data, title=form.title.data.strip(), body=form.body.data.strip(),
+                    user_id=current_user.id)
+        _save_news_fields(post, form)
+        if item and BOARDS[post.board][1] == "news":
+            post.original_title = item.title[:500] if (item.title_ko and item.title_ko != item.title) else None
+            post.source_name = item.source_name
+            post.lang = item.lang
+            post.published_at = item.published_at
+            translated = item.comments_ko or []
+            for i, c in enumerate(item.comments or []):
+                post.reactions.append(Reaction(
+                    position=i, author=(c.get("author") or "")[:100], body=c.get("body") or "",
+                    body_ko=translated[i] if i < len(translated) else None, score=c.get("score", 0),
+                    source=item.source_type,
+                ))
         db.session.add(post)
+        db.session.flush()
+        if item:
+            item.status, item.post_id = "published", post.id
         db.session.commit()
         flash("게시글이 등록되었습니다.", "success")
         return redirect(url_for("main.post_detail", board=post.board, post_id=post.id))
-    return render_template("board/write.html", form=form, post=None)
+    return render_template("board/write.html", form=form, post=None, item=item)
 
 
 @bp.route("/post/<int:post_id>/edit", methods=["GET", "POST"])
@@ -143,21 +196,38 @@ def edit(post_id):
     post = db.get_or_404(Post, post_id)
     if not _can_edit(post):
         abort(403)
-    form = PostForm(obj=post)
+    form = _prepare_form(PostForm(obj=post))
+    if post.board not in dict(form.board.choices):  # 예: 기자 자격을 잃은 회원의 기존 해외 반응 글
+        form.board.choices.insert(0, (post.board, BOARDS[post.board][0]))
     if form.validate_on_submit():
+        if form.board.data != post.board and not can_write_board(current_user, form.board.data):
+            abort(403)
         post.board = form.board.data
         post.title = form.title.data.strip()
         post.body = form.body.data.strip()
-        url = (form.source_url.data or "").strip() or None
-        if url != post.source_url and url and Post.query.filter_by(source_url=url).first():
-            flash("이미 등록된 원문 링크입니다.", "warning")
-            return render_template("board/write.html", form=form, post=post)
-        post.source_url = url
-        post.country = form.country.data or None
+        _save_news_fields(post, form)
         db.session.commit()
         flash("수정되었습니다.", "success")
         return redirect(url_for("main.post_detail", board=post.board, post_id=post.id))
-    return render_template("board/write.html", form=form, post=post)
+    return render_template("board/write.html", form=form, post=post, item=None)
+
+
+# ---------------------------------------------------------------- 기자 지원
+@bp.route("/reporter/apply", methods=["GET", "POST"])
+@login_required
+def reporter_apply():
+    latest = (
+        ReporterApplication.query.filter_by(user_id=current_user.id)
+        .order_by(ReporterApplication.id.desc()).first()
+    )
+    form = ReporterApplyForm()
+    can_apply = current_user.role == ROLE_MEMBER and not (latest and latest.status == "pending")
+    if can_apply and form.validate_on_submit():
+        db.session.add(ReporterApplication(user_id=current_user.id, message=form.message.data.strip()))
+        db.session.commit()
+        flash("기자 지원서가 접수되었습니다. 관리자 승인 후 해외 반응 게시판에 글을 올릴 수 있습니다.", "success")
+        return redirect(url_for("main.reporter_apply"))
+    return render_template("pages/reporter_apply.html", form=form, latest=latest, can_apply=can_apply)
 
 
 @bp.route("/post/<int:post_id>/delete", methods=["POST"])

@@ -9,7 +9,8 @@
         {% if p.comment_count or p.reactions %}<span class="cnt">[{{ p.comment_count + (p.reactions|length) }}]</span>{% endif %}
       </div>
       <div class="meta">
-        <span>{{ p.source_name if p.is_collected and p.source_name else p.author_name }}</span>
+        <span>{{ p.author_name }}</span>
+        {% if p.source_name %}<span>{{ p.source_name }}</span>{% endif %}
         <span>{{ p.created_at|timeago }}</span>
         <span>조회 {{ p.views }}</span>
         {% if p.like_count %}<span class="likes">추천 {{ p.like_count }}</span>{% endif %}

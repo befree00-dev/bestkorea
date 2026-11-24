@@ -1,23 +1,89 @@
 {% extends "base.html" %}
+{% from "partials/role.html" import role_badge %}
 {% block title %}관리자{% endblock %}
 {% block sidebar %}{% endblock %}
 {% block content %}
 <div class="box">
   <h1>관리자 대시보드</h1>
   <div class="stats">
-    <div><strong class="{{ 'ok' if today >= cfg.DAILY_TARGET else 'warn' }}">{{ today }}</strong><span>최근 24시간 수집 (목표 {{ cfg.DAILY_TARGET }}+)</span></div>
-    <div><strong>{{ stats.posts }}</strong><span>전체 글</span></div>
+    <div><strong>{{ stats.users }}</strong><span>회원 (운영자 {{ role_counts.operator }} · 기자 {{ role_counts.reporter }})</span></div>
+    <div><strong>{{ stats.posts }}</strong><span>게시글</span></div>
     <div><strong>{{ stats.comments }}</strong><span>댓글</span></div>
-    <div><strong>{{ stats.users }}</strong><span>회원</span></div>
+    <div><strong class="{{ 'ok' if today >= cfg.DAILY_TARGET else 'warn' }}">{{ today }}</strong><span>최근 24시간 수집 (목표 {{ cfg.DAILY_TARGET }}+)</span></div>
   </div>
-  <p class="muted">자동 수집: {{ '켜짐 (' ~ cfg.COLLECT_INTERVAL_MINUTES ~ '분 간격)' if cfg.ENABLE_SCHEDULER else '꺼짐 (cron으로 flask collect 실행)' }} ·
+  <p class="muted">자동 수집: {{ cfg.COLLECT_INTERVAL_MINUTES ~ '분 간격 (웹 내장)' if cfg.ENABLE_SCHEDULER else '수집기 컨테이너/cron 에서 실행' }} ·
      Reddit: {{ '켜짐 (API 키)' if reddit_on else '꺼짐 (API 키 없음 — REDDIT_CLIENT_ID/SECRET 설정 시 자동으로 켜짐)' }} ·
-     번역: {{ '켜짐 (' ~ cfg.ANTHROPIC_MODEL ~ ')' if cfg.TRANSLATE_ENABLED else '꺼짐' }} ·
+     번역 모델: {{ cfg.ANTHROPIC_MODEL }} ·
      AdSense: {{ cfg.ADSENSE_CLIENT or '미설정' }}</p>
-  <form action="{{ url_for('admin.collect_now') }}" method="post">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn btn-primary">지금 수집 실행</button>
+  <div class="actions" style="justify-content:flex-start">
+    <a class="btn btn-primary" href="{{ url_for('desk.index') }}">수집함 열기</a>
+    <form action="{{ url_for('admin.collect_now') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="btn">지금 수집 실행</button>
+    </form>
+  </div>
+</div>
+
+<div class="box" id="applications">
+  <h2>기자 지원 <small class="cnt">{{ applications|length }}</small></h2>
+  {% for a in applications %}
+    <div class="application">
+      <div class="c-meta"><strong>{{ a.user.username }}</strong> <span class="muted">{{ a.user.email }}</span> <time>{{ a.created_at|timeago }}</time></div>
+      <p>{{ a.message|nl2br }}</p>
+      <form action="{{ url_for('admin.decide_application', app_id=a.id, decision='approve') }}" method="post" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-primary small">기자로 승인</button>
+      </form>
+      <form action="{{ url_for('admin.decide_application', app_id=a.id, decision='reject') }}" method="post" class="inline">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn small btn-danger">반려</button>
+      </form>
+    </div>
+  {% else %}
+    <p class="muted">대기 중인 기자 지원이 없습니다.</p>
+  {% endfor %}
+</div>
+
+<div class="box" id="users">
+  <h2>회원 등급 관리</h2>
+  <p class="muted small">관리자는 1명이며 화면에서 넘길 수 없습니다 (서버에서 <code>flask make-admin 이메일</code>).
+     운영자는 수집함 사용과 해외 반응 게시, 기자는 해외 반응 게시, 회원은 커뮤니티 게시판만 쓸 수 있습니다.</p>
+  <div class="chips">
+    <a class="chip {{ 'active' if not request.args.get('role') }}" href="{{ url_with(role=None) }}#users">전체</a>
+    {% for key, label in ROLES.items() %}
+      <a class="chip {{ 'active' if request.args.get('role') == key }}" href="{{ url_with(role=key) }}#users">{{ label }} {{ role_counts[key] }}</a>
+    {% endfor %}
+  </div>
+  <form class="desk-search" method="get" action="#users">
+    {% if request.args.get('role') %}<input type="hidden" name="role" value="{{ request.args.get('role') }}">{% endif %}
+    <input type="search" name="q" value="{{ request.args.get('q', '') }}" placeholder="닉네임·이메일 검색">
   </form>
+  <table class="table">
+    <thead><tr><th>닉네임</th><th>이메일</th><th>가입일</th><th>등급</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr>
+        <td>{{ u.username }} {{ role_badge(u) }}{% if u.is_banned %} <span class="likes">(제한)</span>{% endif %}</td>
+        <td>{{ u.email }}</td>
+        <td>{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+        <td>
+          {% if u.is_admin %}관리자{% else %}
+          <form action="{{ url_for('admin.set_role', user_id=u.id) }}" method="post" class="inline role-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <select name="role" aria-label="{{ u.username }} 등급">
+              {% for r in ASSIGNABLE_ROLES %}<option value="{{ r }}" {{ 'selected' if u.role == r }}>{{ ROLES[r] }}</option>{% endfor %}
+            </select>
+            <button class="btn small">변경</button>
+          </form>
+          {% endif %}
+        </td>
+        <td>{% if u.id != current_user.id %}
+          <form action="{{ url_for('admin.toggle_ban', user_id=u.id) }}" method="post" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn small {{ 'btn-danger' if not u.is_banned }}">{{ '제한 해제' if u.is_banned else '이용 제한' }}</button>
+          </form>{% endif %}</td>
+      </tr>
+    {% else %}<tr><td colspan="5">해당 회원이 없습니다.</td></tr>{% endfor %}
+    </tbody>
+  </table>
 </div>
 
 <div class="box">
@@ -29,23 +95,6 @@
       <tr><td>{{ l.started_at.strftime('%m-%d %H:%M') }}</td><td>{{ l.added }}</td><td>{{ l.skipped }}</td>
         <td>{% if l.errors %}<details><summary>{{ l.errors.split('\n')|length }}건</summary><pre>{{ l.errors }}</pre></details>{% else %}-{% endif %}</td></tr>
     {% else %}<tr><td colspan="4">기록 없음</td></tr>{% endfor %}
-    </tbody>
-  </table>
-</div>
-
-<div class="box">
-  <h2>최근 가입 회원</h2>
-  <table class="table">
-    <thead><tr><th>닉네임</th><th>이메일</th><th>가입일</th><th></th></tr></thead>
-    <tbody>
-    {% for u in users %}
-      <tr><td>{{ u.username }}{% if u.is_admin %} (관리자){% endif %}</td><td>{{ u.email }}</td><td>{{ u.created_at.strftime('%Y-%m-%d') }}</td>
-        <td>{% if u.id != current_user.id %}
-          <form action="{{ url_for('admin.toggle_ban', user_id=u.id) }}" method="post" class="inline">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="btn small {{ 'btn-danger' if not u.is_banned }}">{{ '제한 해제' if u.is_banned else '이용 제한' }}</button>
-          </form>{% endif %}</td></tr>
-    {% endfor %}
     </tbody>
   </table>
 </div>

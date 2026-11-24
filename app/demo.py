@@ -1,67 +1,101 @@
-"""개발용 샘플 데이터. 실제 기사가 아니며, 화면 구성을 확인하기 위한 용도입니다."""
+"""개발용 샘플 데이터. 실제 기사가 아니며, 화면 구성을 확인하기 위한 용도입니다.
+
+샘플 계정 (비밀번호 모두 demo12345):
+  operator@example.com (운영자) / reporter@example.com (기자) / member@example.com (회원)
+"""
 from datetime import timedelta
 
-from .constants import COMMUNITY_BOARDS, NEWS_BOARDS
+from .constants import COMMUNITY_BOARDS, NEWS_BOARDS, ROLE_MEMBER, ROLE_OPERATOR, ROLE_REPORTER
 from .extensions import db
-from .models import Comment, Post, Reaction, User, utcnow
+from .models import CollectedItem, Comment, Post, Reaction, User, utcnow
 
 COUNTRY_CYCLE = ["us", "jp", "cn", "eu", "latam", "au", "reddit"]
 SOURCES = {
     "us": "Example Times (US)", "jp": "サンプル新聞", "cn": "示例日报", "eu": "Beispiel Zeitung",
     "latam": "Diario Ejemplo", "au": "Sample Herald AU", "reddit": "r/korea",
 }
-SAMPLE_REACTIONS = [
+SAMPLE_COMMENTS = [
     ("user_a", "I visited Seoul last year and this totally matches my experience.", "작년에 서울 갔었는데 내 경험이랑 완전 똑같네.", 512),
     ("user_b", "Interesting perspective, didn't know about this.", "흥미로운 관점이네, 이건 몰랐어.", 233),
     ("user_c", "The comments here are better than the article lol", "기사보다 댓글이 더 재밌네 ㅋㅋ", 98),
 ]
+DEMO_USERS = [
+    ("데모운영자", "operator@example.com", ROLE_OPERATOR),
+    ("데모기자", "reporter@example.com", ROLE_REPORTER),
+    ("데모회원", "member@example.com", ROLE_MEMBER),
+]
+
+
+def _user(name, email, role):
+    u = User.query.filter_by(email=email).first()
+    if not u:
+        u = User(username=name, email=email, role=role)
+        u.set_password("demo12345")
+        db.session.add(u)
+        db.session.flush()
+    return u
 
 
 def seed():
-    if Post.query.filter(Post.source_url.like("https://example.com/sample/%")).first():
+    if CollectedItem.query.filter(CollectedItem.url.like("https://example.com/sample/%")).first():
         return 0
-    demo = User.query.filter_by(email="demo@example.com").first()
-    if not demo:
-        demo = User(username="데모회원", email="demo@example.com")
-        demo.set_password("demo12345")
-        db.session.add(demo)
-        db.session.flush()
-
+    operator, reporter, member = (_user(*u) for u in DEMO_USERS)
     now = utcnow()
     n = 0
+
+    # 해외 반응 게시글 (기자·운영자가 작성)
     for b_i, board in enumerate(NEWS_BOARDS):
-        for i in range(4):
+        for i in range(3):
             country = COUNTRY_CYCLE[(b_i + i) % len(COUNTRY_CYCLE)]
             post = Post(
-                board=board,
-                title=f"[샘플] {SOURCES[country]}가 본 한국 #{b_i * 4 + i + 1}",
-                original_title=f"[Sample] How {SOURCES[country]} sees Korea #{b_i * 4 + i + 1}",
-                body="이 글은 화면 확인용 샘플입니다. 실제 수집 시에는 원문 기사의 짧은 발췌와 링크가 표시됩니다.",
-                source_url=f"https://example.com/sample/{board}/{i}",
-                source_name=SOURCES[country],
-                country=country,
-                lang="en",
-                views=(i + 1) * 37,
-                like_count=i * 3,
+                board=board, user_id=(reporter if i % 2 == 0 else operator).id,
+                title=f"[샘플] {SOURCES[country]}가 본 한국 #{b_i * 3 + i + 1}",
+                original_title=f"[Sample] How {SOURCES[country]} sees Korea #{b_i * 3 + i + 1}",
+                body="화면 확인용 샘플 기사입니다. 실제로는 수집함에서 번역한 500자 이내 요약이 들어갑니다.",
+                source_url=f"https://example.com/sample/post/{board}/{i}", source_name=SOURCES[country],
+                country=country, lang="en", views=(i + 1) * 37, like_count=i * 3,
                 created_at=now - timedelta(hours=b_i * 3 + i),
-                published_at=now - timedelta(hours=b_i * 3 + i + 1),
             )
-            if country == "reddit":
-                for author, body, ko, score in SAMPLE_REACTIONS:
-                    post.reactions.append(Reaction(author=author, body=body, body_ko=ko, score=score))
+            for pos, (author, body, ko, score) in enumerate(SAMPLE_COMMENTS):
+                post.reactions.append(Reaction(position=pos, author=author, body=body, body_ko=ko, score=score))
             db.session.add(post)
             n += 1
+
+    # 커뮤니티 게시글 (일반 회원)
     for board in COMMUNITY_BOARDS:
         for i in range(3):
-            post = Post(
-                board=board, title=f"[샘플] {board} 게시판 테스트 글 {i + 1}",
-                body="회원이 작성한 글 예시입니다.\n줄바꿈도 표시됩니다.", user_id=demo.id,
-                created_at=now - timedelta(hours=i * 5),
-            )
+            post = Post(board=board, title=f"[샘플] {board} 게시판 테스트 글 {i + 1}",
+                        body="회원이 작성한 글 예시입니다.\n줄바꿈도 표시됩니다.", user_id=member.id,
+                        created_at=now - timedelta(hours=i * 5))
             db.session.add(post)
             db.session.flush()
-            db.session.add(Comment(post_id=post.id, user_id=demo.id, body="샘플 댓글입니다."))
+            db.session.add(Comment(post_id=post.id, user_id=reporter.id, body="샘플 댓글입니다."))
             post.comment_count = 1
             n += 1
+
+    # 수집함 (아직 게시되지 않은 수집 글)
+    for i in range(8):
+        country = COUNTRY_CYCLE[i % len(COUNTRY_CYCLE)]
+        is_reddit = country == "reddit"
+        item = CollectedItem(
+            source_type="reddit" if is_reddit else "gnews", source_id="demo",
+            url=f"https://example.com/sample/item/{i}",
+            title=f"[Sample] Foreign coverage of Korea #{i + 1}",
+            snippet="Sample snippet for layout testing." if not is_reddit else "Sample Reddit self post body.",
+            source_name=SOURCES[country], country=country, lang="en",
+            category_hint=NEWS_BOARDS[i % len(NEWS_BOARDS)],
+            num_comments=len(SAMPLE_COMMENTS) if is_reddit else 0,
+            comments=[dict(author=a, body=b, score=s) for a, b, _, s in SAMPLE_COMMENTS] if is_reddit else [],
+            collected_at=now - timedelta(hours=i),
+        )
+        if i == 0:  # 번역까지 끝난 예시
+            item.translate_status = "done"
+            item.translated_at = now
+            item.title_ko = "[샘플] 해외 언론이 본 한국 #1"
+            item.summary_ko = "번역 버튼을 누르면 이 자리에 원문 기사를 500자 이내로 요약한 내용이 들어갑니다."
+            item.category_ko = item.category_hint
+        db.session.add(item)
+        n += 1
+
     db.session.commit()
     return n

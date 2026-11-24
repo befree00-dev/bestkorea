@@ -11,7 +11,7 @@
 {% if not current_user.is_authenticated %}
 <section class="box join-box">
   <h3>함께 이야기해요</h3>
-  <p>글 읽기는 누구나 가능! 해외 뉴스 제보, 글쓰기와 댓글은 회원가입 후 이용할 수 있어요.</p>
+  <p>글 읽기는 누구나 가능! 커뮤니티 글쓰기와 댓글은 회원가입 후, 해외 반응 기사는 기자로 활동하며 올릴 수 있어요.</p>
   <a class="btn btn-primary block" href="{{ url_for('auth.signup') }}">무료 회원가입</a>
 </section>
 {% endif %}

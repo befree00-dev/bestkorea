@@ -8,7 +8,7 @@ from markupsafe import Markup, escape
 
 from config import Config
 
-from .constants import BOARDS, COMMUNITY_BOARDS, COUNTRIES, NEWS_BOARDS, board_name, country_label
+from .constants import BOARDS, COMMUNITY_BOARDS, COUNTRIES, NEWS_BOARDS, board_name, can_write_board, country_label
 from .extensions import csrf, db, login_manager
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
@@ -37,10 +37,12 @@ def create_app(config_class=Config):
     from .auth import bp as auth_bp
     from .views import bp as main_bp
     from .admin import bp as admin_bp
+    from .desk import bp as desk_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(desk_bp)
 
     _register_template_helpers(app)
     _register_errors(app)
@@ -72,6 +74,7 @@ def _register_template_helpers(app):
             country_label=country_label,
             cfg=app.config,
             url_with=url_with,
+            can_write_board=can_write_board,
         )
 
     def url_with(**overrides):

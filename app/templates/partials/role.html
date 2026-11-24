@@ -1,0 +1,3 @@
+{% macro role_badge(user) -%}
+  {% if user and user.role != 'member' %}<span class="role role-{{ user.role }}">{{ user.role_name }}</span>{% endif %}
+{%- endmacro %}

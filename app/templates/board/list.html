@@ -9,8 +9,15 @@
     {% if board %}<p class="muted">{{ BOARDS[board][2] }}</p>{% endif %}
   </div>
   {% if board %}
-    <a class="btn btn-primary" href="{{ url_for('main.write', board=board) if current_user.is_authenticated else url_for('auth.login', next=url_for('main.write', board=board)) }}">
-      {{ '뉴스 제보' if BOARDS[board][1] == 'news' else '글쓰기' }}</a>
+    {% if can_write_board(current_user, board) %}
+      <a class="btn btn-primary" href="{{ url_for('main.write', board=board) }}">글쓰기</a>
+    {% elif BOARDS[board][1] == 'news' %}
+      {% if not current_user.is_authenticated or current_user.role == 'member' %}
+      <a class="btn" href="{{ url_for('main.reporter_apply') }}" title="해외 반응 글은 기자·운영자가 작성합니다">기자 지원하기</a>
+      {% endif %}
+    {% else %}
+      <a class="btn btn-primary" href="{{ url_for('auth.login', next=url_for('main.write', board=board)) }}">글쓰기</a>
+    {% endif %}
   {% endif %}
 </div>
 

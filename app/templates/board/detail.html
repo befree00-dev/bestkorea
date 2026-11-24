@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "partials/ad.html" import ad with context %}
+{% from "partials/role.html" import role_badge %}
 {% block title %}{{ post.title }}{% endblock %}
 {% block description %}{{ (post.body or post.original_title or post.title)|striptags|truncate(150) }}{% endblock %}
 {% block og_type %}article{% endblock %}
@@ -11,7 +12,8 @@
   <h1>{{ post.title }}</h1>
   {% if post.original_title %}<p class="original-title" lang="{{ post.lang or '' }}">원제: {{ post.original_title }}</p>{% endif %}
   <div class="meta">
-    <span>{{ post.author_name }}</span>
+    <span>{{ post.author_name }} {{ role_badge(post.author) }}</span>
+    {% if post.source_name %}<span>출처 {{ post.source_name }}</span>{% endif %}
     <span>{{ post.created_at.strftime('%Y.%m.%d %H:%M') }} (UTC)</span>
     <span>조회 {{ post.views }}</span>
     <span>추천 {{ post.like_count }}</span>
@@ -75,7 +77,7 @@
   <ul>
     {% for c in post.comments %}
     <li>
-      <div class="c-meta"><strong>{{ c.author.username }}</strong> <time>{{ c.created_at|timeago }}</time>
+      <div class="c-meta"><strong>{{ c.author.username }}</strong>{{ role_badge(c.author) }} <time>{{ c.created_at|timeago }}</time>
         {% if current_user.is_authenticated and (current_user.is_admin or c.user_id == current_user.id) %}
         <form action="{{ url_for('main.delete_comment', comment_id=c.id) }}" method="post" class="inline">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="link small">삭제</button>

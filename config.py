@@ -54,20 +54,30 @@ class Config:
     SHOW_AD_PLACEHOLDERS = _bool("SHOW_AD_PLACEHOLDERS", True)
     GOOGLE_ANALYTICS_ID = os.environ.get("GOOGLE_ANALYTICS_ID", "")
 
-    # --- 자동 수집 ---
+    # --- 자동 수집 (수집함에만 쌓이고, 사이트 게시는 운영자가 직접) ---
     ENABLE_SCHEDULER = _bool("ENABLE_SCHEDULER", False)
     COLLECT_INTERVAL_MINUTES = int(os.environ.get("COLLECT_INTERVAL_MINUTES", 180))
     COLLECT_MAX_PER_SOURCE = int(os.environ.get("COLLECT_MAX_PER_SOURCE", 4))
     COLLECT_MAX_PER_RUN = int(os.environ.get("COLLECT_MAX_PER_RUN", 40))
     DAILY_TARGET = int(os.environ.get("DAILY_TARGET", 10))
-    REACTIONS_PER_POST = int(os.environ.get("REACTIONS_PER_POST", 8))
+    MIN_COMMENTS = int(os.environ.get("MIN_COMMENTS", 10))  # 커뮤니티 글은 댓글이 이만큼 이상일 때만 수집
+    COMMENTS_PER_ITEM = int(os.environ.get("COMMENTS_PER_ITEM", 50))  # 글당 저장·번역할 댓글 수 (인기순)
     HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "web:bestkorea-collector:1.0")
+    # 원문 기사 본문을 가져올 때 쓰는 브라우저 User-Agent (일부 언론사는 봇 UA를 차단)
+    ARTICLE_USER_AGENT = os.environ.get(
+        "ARTICLE_USER_AGENT",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/130.0 Safari/537.36",
+    )
     REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
     REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
 
-    # --- 선택: Claude로 제목/요약/반응 한국어 번역 + 카테고리 분류 ---
-    TRANSLATE_ENABLED = _bool("TRANSLATE_ENABLED", False)
+    # --- 수집함 '번역' 버튼: Claude API (ANTHROPIC_API_KEY 필요) ---
     ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5")
+    ANTHROPIC_EFFORT = os.environ.get("ANTHROPIC_EFFORT", "low")
+    SUMMARY_MAX_CHARS = int(os.environ.get("SUMMARY_MAX_CHARS", 500))
+    ARTICLE_MAX_CHARS = int(os.environ.get("ARTICLE_MAX_CHARS", 60000))
+    TRANSLATE_SYNC = False  # 테스트용: True 면 번역을 백그라운드가 아닌 요청 안에서 실행
 
 
 class TestConfig(Config):
@@ -77,5 +87,5 @@ class TestConfig(Config):
     ADMIN_EMAIL = ""
     WTF_CSRF_ENABLED = False
     ENABLE_SCHEDULER = False
-    TRANSLATE_ENABLED = False
+    TRANSLATE_SYNC = True
     SECRET_KEY = "test"

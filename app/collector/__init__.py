@@ -1,7 +1,9 @@
-"""해외 한국 관련 뉴스/반응 수집기.
+"""해외 한국 관련 뉴스/게시물 수집기.
+
+수집한 글은 사이트에 바로 게시되지 않고 '수집함'(CollectedItem)에만 쌓인다.
+관리자·운영자가 수집함에서 번역한 뒤 직접 게시글로 올린다.
 
     flask collect            # 한 번 수집
-    ENABLE_SCHEDULER=true    # 웹 서버 안에서 COLLECT_INTERVAL_MINUTES 마다 자동 수집
 """
 import logging
 from datetime import timedelta
@@ -10,25 +12,17 @@ from itertools import zip_longest
 import requests
 from flask import current_app
 
-from ..constants import NEWS_BOARDS
 from ..extensions import db
-from ..models import CollectLog, Post, Reaction, utcnow
+from ..models import CollectedItem, CollectLog, utcnow
 from .classify import classify
 from .fetchers import RedditClient, fetch_reddit, fetch_rss
 from .sources import REDDIT_SOURCES, RSS_SOURCES
 
 log = logging.getLogger(__name__)
 
-# 소스 설정에서 정치·사회로 고정한 Reddit 소스 (재분류 대상에서 제외)
-POLITICS_SOURCE_NAMES = {
-    f"r/{sub}" for src in REDDIT_SOURCES if src.get("category") == "politics" for sub in src["sub"].split("+")
-}
 
-
-def today_news_count():
-    return Post.query.filter(
-        Post.board.in_(NEWS_BOARDS), Post.user_id.is_(None), Post.created_at >= utcnow() - timedelta(days=1)
-    ).count()
+def today_collected_count():
+    return CollectedItem.query.filter(CollectedItem.collected_at >= utcnow() - timedelta(days=1)).count()
 
 
 def reddit_enabled(cfg):
@@ -56,7 +50,9 @@ def gather(cfg, session=None, per_source=4):
     reddit = RedditClient(session, cfg["REDDIT_CLIENT_ID"], cfg["REDDIT_CLIENT_SECRET"], cfg["HTTP_USER_AGENT"])
     for src in REDDIT_SOURCES:
         try:
-            results.append(fetch_reddit(src, reddit, per_source, cfg["REACTIONS_PER_POST"]))
+            results.append(
+                fetch_reddit(src, reddit, per_source, cfg["COMMENTS_PER_ITEM"], cfg["MIN_COMMENTS"])
+            )
         except Exception as exc:
             errors.append(f"{src['id']}: {exc}")
     return results, errors
@@ -78,51 +74,29 @@ def _interleave(lists):
     yield from _round_robin([list(_round_robin(group)) for group in by_country.values()])
 
 
-def save_item(item, cfg):
-    """새 항목이면 Post로 저장하고 반환, 중복이면 None."""
-    if len(item.url) > 2000 or Post.query.filter_by(source_url=item.url).first():
+def save_item(item):
+    """새 항목이면 CollectedItem 으로 저장하고 반환, 중복이면 None."""
+    if len(item.url) > 2000 or CollectedItem.query.filter_by(url=item.url).first():
         return None
-    title, summary = item.title, item.summary
-    category = item.category
-    reactions_ko = []
-    if cfg["TRANSLATE_ENABLED"]:
-        from .enrich import enrich
-
-        result = enrich(item, cfg["ANTHROPIC_MODEL"])
-        if result:
-            title, summary = result.title_ko or title, result.summary_ko
-            category = category or result.category
-            reactions_ko = result.reactions_ko
-    category = category or classify(f"{item.title} {item.summary}")
-    if category not in NEWS_BOARDS:
-        category = "fun"  # 분류 불가 → 기타
-
-    body = summary
-    if item.article_url:
-        body = (body + "\n\n" if body else "") + f"관련 기사: {item.article_url}"
-
-    post = Post(
-        board=category,
-        title=title[:300],
-        original_title=item.title[:500] if title != item.title else None,
-        body=body or "",
-        source_url=item.url,
+    row = CollectedItem(
+        source_type="reddit" if item.country == "reddit" else "gnews",
+        source_id=item.source_id,
+        url=item.url,
+        article_url=item.article_url if item.article_url and len(item.article_url) <= 2000 else None,
+        title=item.title[:500],
+        snippet=item.summary or "",
         source_name=(item.source_name or "")[:200],
         country=item.country,
         lang=(item.lang or "")[:10],
+        category_hint=item.category or classify(f"{item.title} {item.summary}"),
         image_url=item.image_url,
+        num_comments=item.num_comments or len(item.reactions),
+        comments=item.reactions,
         published_at=item.published_at,
     )
-    for i, r in enumerate(item.reactions):
-        post.reactions.append(
-            Reaction(
-                author=r["author"][:100], body=r["body"], score=r.get("score", 0),
-                body_ko=reactions_ko[i] if i < len(reactions_ko) else None,
-            )
-        )
-    db.session.add(post)
+    db.session.add(row)
     db.session.commit()
-    return post
+    return row
 
 
 def run_collection(session=None):
@@ -133,7 +107,7 @@ def run_collection(session=None):
     db.session.commit()
 
     per_source = cfg["COLLECT_MAX_PER_SOURCE"]
-    if today_news_count() < cfg["DAILY_TARGET"]:
+    if today_collected_count() < cfg["DAILY_TARGET"]:
         per_source *= 2  # 오늘 목표치 미달이면 더 많이 가져온다
 
     lists, errors = gather(cfg, session, per_source)
@@ -142,7 +116,7 @@ def run_collection(session=None):
         if added >= cfg["COLLECT_MAX_PER_RUN"]:
             break
         try:
-            if save_item(item, cfg):
+            if save_item(item):
                 added += 1
             else:
                 skipped += 1
@@ -156,29 +130,3 @@ def run_collection(session=None):
     db.session.commit()
     log.info("collection finished: added=%s skipped=%s errors=%s", added, skipped, len(errors))
     return run
-
-
-def reclassify_fallback_politics(dry_run=False):
-    """예전 기본값 때문에 '정치·사회'로 들어간 자동 수집 기사를 '기타'로 옮긴다.
-
-    옮기는 대상(모두 해당해야 함):
-      - 자동 수집 글 (회원이 쓴 글은 그대로)
-      - Claude 번역을 거치지 않은 글 (번역 시에는 Claude가 직접 정치·사회로 분류한 것이므로 유지)
-      - r/worldnews 처럼 소스에서 정치·사회로 지정한 글이 아님
-      - 제목·본문에 어떤 카테고리 키워드도 없음
-    옮긴 Post 목록을 반환한다.
-    """
-    candidates = Post.query.filter(
-        Post.board == "politics",
-        Post.user_id.is_(None),
-        Post.original_title.is_(None),
-    ).all()
-    moved = [
-        p for p in candidates
-        if p.source_name not in POLITICS_SOURCE_NAMES and classify(f"{p.title} {p.body}", default=None) is None
-    ]
-    if not dry_run:
-        for p in moved:
-            p.board = "fun"
-        db.session.commit()
-    return moved
