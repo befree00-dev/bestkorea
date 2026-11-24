@@ -102,6 +102,22 @@ button.link:hover { color: var(--brand); }
 .cnt { color: var(--accent); font-weight: 700; font-size: 13px; margin-left: 2px; }
 .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 13px; color: var(--muted); margin-top: 2px; }
 .tag { color: var(--brand); font-weight: 600; }
+.cat { display: inline-block; font-size: 12px; font-weight: 700; line-height: 1; padding: 4px 7px; border-radius: 5px;
+  margin-right: 6px; vertical-align: 2px; white-space: nowrap; color: var(--cat, var(--brand));
+  background: color-mix(in srgb, var(--cat, var(--brand)) 13%, transparent); }
+.cat-politics { --cat: #2f5bd3; }
+.cat-economy { --cat: #0f8a5f; }
+.cat-entertainment { --cat: #c0368c; }
+.cat-sports { --cat: #d0621b; }
+.cat-game { --cat: #7a45d6; }
+.cat-fun { --cat: #b58a00; }
+.cat-humor, .cat-free { --cat: #5b6475; }
+@media (prefers-color-scheme: dark) {
+  .cat-politics { --cat: #7fa0ff; } .cat-economy { --cat: #4ccf98; } .cat-entertainment { --cat: #f07cc2; }
+  .cat-sports { --cat: #ff9d5c; } .cat-game { --cat: #b28cff; } .cat-fun { --cat: #e8c24a; }
+  .cat-humor, .cat-free { --cat: #a3abbd; }
+}
+.community-grid { align-items: start; }
 .likes { color: var(--accent); }
 .mini-list { list-style: none; margin: 0; padding: 0; }
 .mini-list li { display: flex; justify-content: space-between; gap: 10px; padding: 6px 0; border-bottom: 1px dashed var(--line); }
@@ -199,10 +215,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--brand); out
 
 @media (max-width: 900px) {
   .layout { grid-template-columns: minmax(0, 1fr); }
-  .grid-2 { grid-template-columns: minmax(0, 1fr); }
+  .grid-2:not(.community-grid) { grid-template-columns: minmax(0, 1fr); }
   .stats { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 600px) {
+  .community-grid { grid-template-columns: minmax(0, 1fr); }
   .header-row { flex-wrap: wrap; height: auto; padding-top: 10px; padding-bottom: 10px; gap: 10px; }
   .search { order: 3; flex-basis: 100%; max-width: none; }
   .user-nav { gap: 10px; font-size: 14px; }

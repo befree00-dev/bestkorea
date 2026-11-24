@@ -17,14 +17,13 @@
 
 {{ ad(cfg.ADSENSE_SLOT_IN_FEED, 'auto', 'ad-infeed') }}
 
-<div class="grid-2">
-  {% for slug in NEWS_BOARDS + COMMUNITY_BOARDS %}
+<div class="grid-2 community-grid">
+  {% for slug in COMMUNITY_BOARDS %}
   <section class="box">
     <div class="box-head"><h2>{{ BOARDS[slug][0] }}</h2><a href="{{ url_for('main.board_list', board=slug) }}">더보기 ›</a></div>
     <ul class="mini-list">
       {% for p in by_board[slug] %}
-        <li><a href="{{ url_for('main.post_detail', board=p.board, post_id=p.id) }}">
-          {% if p.country %}<span class="flag">{{ COUNTRIES.get(p.country, COUNTRIES['etc'])[1] }}</span>{% endif %}{{ p.title }}
+        <li><a href="{{ url_for('main.post_detail', board=p.board, post_id=p.id) }}">{{ p.title }}
           {% if p.comment_count %}<span class="cnt">[{{ p.comment_count }}]</span>{% endif %}</a>
           <time>{{ p.created_at|timeago }}</time></li>
       {% else %}<li class="empty">첫 글을 기다리고 있어요.</li>{% endfor %}

@@ -40,11 +40,11 @@ def index():
     since = utcnow() - timedelta(days=1)
     today_count = Post.query.filter(Post.board.in_(NEWS_BOARDS), Post.created_at >= since).count()
     latest_news = (
-        Post.query.filter(Post.board.in_(NEWS_BOARDS)).order_by(Post.created_at.desc()).limit(12).all()
+        Post.query.filter(Post.board.in_(NEWS_BOARDS)).order_by(Post.created_at.desc()).limit(20).all()
     )
     by_board = {
-        slug: Post.query.filter_by(board=slug).order_by(Post.created_at.desc()).limit(6).all()
-        for slug in NEWS_BOARDS + COMMUNITY_BOARDS
+        slug: Post.query.filter_by(board=slug).order_by(Post.created_at.desc()).limit(8).all()
+        for slug in COMMUNITY_BOARDS
     }
     week = utcnow() - timedelta(days=7)
     popular = (
