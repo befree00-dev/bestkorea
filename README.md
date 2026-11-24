@@ -29,6 +29,7 @@ FLASK_APP=wsgi .venv/bin/flask run
 - 화면 확인용 샘플 데이터: `FLASK_APP=wsgi .venv/bin/flask seed-demo` (운영 DB에는 사용하지 마세요)
 - 수동 수집: `FLASK_APP=wsgi .venv/bin/flask collect`
 - 테스트: `.venv/bin/python -m pytest -q`
+- 예전 버전에서 키워드 없이 '정치·사회'로 들어간 수집 기사를 '기타'로 옮기기: `FLASK_APP=wsgi .venv/bin/flask reclassify --dry-run`으로 대상 확인 후 `flask reclassify`
 
 ## 매일 10건 이상 자동 업데이트
 

@@ -173,3 +173,33 @@ def test_cli_collect(app, monkeypatch):
     monkeypatch.setattr(collector, "_new_session", lambda cfg: FakeSession())
     result = app.test_cli_runner().invoke(args=["collect"])
     assert "추가" in result.output and result.exit_code == 0
+
+
+def test_reclassify_fallback_politics(app):
+    from app.extensions import db
+    from app.models import User
+
+    u = User(username="m", email="m@example.com", password_hash="x")
+    db.session.add(u)
+    db.session.commit()
+    rows = dict(
+        fallback=Post(board="politics", title="A quiet street in Busan", body="", source_url="https://x.test/1"),
+        keyword=Post(board="politics", title="President visits Tokyo", body="", source_url="https://x.test/2"),
+        worldnews=Post(board="politics", title="Something odd", body="", source_name="r/worldnews",
+                       source_url="https://x.test/3"),
+        translated=Post(board="politics", title="번역된 제목", original_title="orig", body="",
+                        source_url="https://x.test/4"),
+        member=Post(board="politics", title="회원 글", body="잡담", user_id=u.id),
+    )
+    db.session.add_all(rows.values())
+    db.session.commit()
+
+    preview = collector.reclassify_fallback_politics(dry_run=True)
+    assert [p.id for p in preview] == [rows["fallback"].id]
+    assert db.session.get(Post, rows["fallback"].id).board == "politics"  # dry-run은 변경 없음
+
+    result = app.test_cli_runner().invoke(args=["reclassify"])
+    assert "1건" in result.output
+    boards = {k: db.session.get(Post, p.id).board for k, p in rows.items()}
+    assert boards == dict(fallback="fun", keyword="politics", worldnews="politics", translated="politics",
+                          member="politics")

@@ -19,6 +19,11 @@ from .sources import REDDIT_SOURCES, RSS_SOURCES
 
 log = logging.getLogger(__name__)
 
+# 소스 설정에서 정치·사회로 고정한 Reddit 소스 (재분류 대상에서 제외)
+POLITICS_SOURCE_NAMES = {
+    f"r/{sub}" for src in REDDIT_SOURCES if src.get("category") == "politics" for sub in src["sub"].split("+")
+}
+
 
 def today_news_count():
     return Post.query.filter(
@@ -144,3 +149,29 @@ def run_collection(session=None):
     db.session.commit()
     log.info("collection finished: added=%s skipped=%s errors=%s", added, skipped, len(errors))
     return run
+
+
+def reclassify_fallback_politics(dry_run=False):
+    """예전 기본값 때문에 '정치·사회'로 들어간 자동 수집 기사를 '기타'로 옮긴다.
+
+    옮기는 대상(모두 해당해야 함):
+      - 자동 수집 글 (회원이 쓴 글은 그대로)
+      - Claude 번역을 거치지 않은 글 (번역 시에는 Claude가 직접 정치·사회로 분류한 것이므로 유지)
+      - r/worldnews 처럼 소스에서 정치·사회로 지정한 글이 아님
+      - 제목·본문에 어떤 카테고리 키워드도 없음
+    옮긴 Post 목록을 반환한다.
+    """
+    candidates = Post.query.filter(
+        Post.board == "politics",
+        Post.user_id.is_(None),
+        Post.original_title.is_(None),
+    ).all()
+    moved = [
+        p for p in candidates
+        if p.source_name not in POLITICS_SOURCE_NAMES and classify(f"{p.title} {p.body}", default=None) is None
+    ]
+    if not dry_run:
+        for p in moved:
+            p.board = "fun"
+        db.session.commit()
+    return moved

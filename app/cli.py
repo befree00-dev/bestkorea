@@ -15,6 +15,18 @@ def register_cli(app):
         if run.errors:
             click.echo("오류:\n" + run.errors)
 
+    @app.cli.command("reclassify")
+    @click.option("--dry-run", is_flag=True, help="옮기지 않고 대상만 보여줍니다.")
+    def reclassify(dry_run):
+        """키워드 없이 '정치·사회'로 들어간 기존 수집 기사를 '기타'로 옮깁니다."""
+        from .collector import reclassify_fallback_politics
+
+        moved = reclassify_fallback_politics(dry_run=dry_run)
+        for p in moved:
+            click.echo(f"  #{p.id} {p.title[:60]}")
+        verb = "옮길 대상" if dry_run else "'기타'로 옮김"
+        click.echo(f"{verb}: {len(moved)}건")
+
     @app.cli.command("make-admin")
     @click.argument("email")
     def make_admin(email):
