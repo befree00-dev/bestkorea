@@ -1,6 +1,6 @@
 from functools import wraps
 
-from flask import Blueprint, abort, flash, redirect, render_template, url_for
+from flask import Blueprint, abort, current_app, flash, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
 from .extensions import db
@@ -23,12 +23,13 @@ def admin_required(f):
 @bp.route("/")
 @admin_required
 def dashboard():
-    from .collector import today_news_count
+    from .collector import reddit_enabled, today_news_count
 
     return render_template(
         "admin/dashboard.html",
         logs=CollectLog.query.order_by(CollectLog.id.desc()).limit(20).all(),
         today=today_news_count(),
+        reddit_on=reddit_enabled(current_app.config),
         stats=dict(
             users=User.query.count(), posts=Post.query.count(), comments=Comment.query.count(),
         ),

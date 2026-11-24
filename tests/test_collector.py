@@ -73,8 +73,15 @@ class FakeSession:
         prefix = str(abs(hash(url)) % 10000)
         return FakeResponse(data=reddit_listing(prefix))
 
-    def post(self, *a, **k):
-        raise AssertionError("no oauth expected")
+    def post(self, url, auth=None, data=None, timeout=None):
+        self.calls.append(url)
+        assert url.endswith("/api/v1/access_token") and data == {"grant_type": "client_credentials"}
+        return FakeResponse(data={"access_token": "tok"})
+
+
+@pytest.fixture(autouse=True)
+def reddit_keys(app):
+    app.config.update(REDDIT_CLIENT_ID="id", REDDIT_CLIENT_SECRET="secret")
 
 
 def test_fetch_rss_strips_publisher_suffix():
@@ -203,3 +210,20 @@ def test_reclassify_fallback_politics(app):
     boards = {k: db.session.get(Post, p.id).board for k, p in rows.items()}
     assert boards == dict(fallback="fun", keyword="politics", worldnews="politics", translated="politics",
                           member="politics")
+
+
+def test_reddit_skipped_without_keys(app):
+    app.config.update(REDDIT_CLIENT_ID="", REDDIT_CLIENT_SECRET="", COLLECT_MAX_PER_RUN=100)
+    session = FakeSession()
+    run = collector.run_collection(session)
+    assert run.errors == "" and run.added > 0
+    assert not any("reddit.com" in u for u in session.calls)
+    assert Post.query.filter_by(country="reddit").count() == 0
+
+
+def test_reddit_uses_oauth_with_keys(app):
+    session = FakeSession()
+    collector.run_collection(session)
+    assert any(u.endswith("/api/v1/access_token") for u in session.calls)
+    assert any(u.startswith("https://oauth.reddit.com/") for u in session.calls)
+    assert session.headers["Authorization"] == "bearer tok"

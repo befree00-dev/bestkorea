@@ -11,6 +11,7 @@
     <div><strong>{{ stats.users }}</strong><span>회원</span></div>
   </div>
   <p class="muted">자동 수집: {{ '켜짐 (' ~ cfg.COLLECT_INTERVAL_MINUTES ~ '분 간격)' if cfg.ENABLE_SCHEDULER else '꺼짐 (cron으로 flask collect 실행)' }} ·
+     Reddit: {{ '켜짐 (API 키)' if reddit_on else '꺼짐 (API 키 없음 — REDDIT_CLIENT_ID/SECRET 설정 시 자동으로 켜짐)' }} ·
      번역: {{ '켜짐 (' ~ cfg.ANTHROPIC_MODEL ~ ')' if cfg.TRANSLATE_ENABLED else '꺼짐' }} ·
      AdSense: {{ cfg.ADSENSE_CLIENT or '미설정' }}</p>
   <form action="{{ url_for('admin.collect_now') }}" method="post">

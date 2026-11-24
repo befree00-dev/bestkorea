@@ -31,6 +31,10 @@ def today_news_count():
     ).count()
 
 
+def reddit_enabled(cfg):
+    return bool(cfg.get("REDDIT_CLIENT_ID") and cfg.get("REDDIT_CLIENT_SECRET"))
+
+
 def _new_session(cfg):
     s = requests.Session()
     s.headers["User-Agent"] = cfg["HTTP_USER_AGENT"]
@@ -46,6 +50,9 @@ def gather(cfg, session=None, per_source=4):
             results.append(fetch_rss(src, session, per_source))
         except Exception as exc:
             errors.append(f"{src['id']}: {exc}")
+    if not reddit_enabled(cfg):
+        # Reddit 은 키 없는 요청을 차단(403)하므로 키가 있을 때만 수집
+        return results, errors
     reddit = RedditClient(session, cfg["REDDIT_CLIENT_ID"], cfg["REDDIT_CLIENT_SECRET"], cfg["HTTP_USER_AGENT"])
     for src in REDDIT_SOURCES:
         try:
