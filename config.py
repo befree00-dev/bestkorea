@@ -9,7 +9,7 @@ load_dotenv(os.path.join(BASE_DIR, ".env"))
 
 def _database_url():
     url = os.environ.get("DATABASE_URL", "sqlite:///" + os.path.join(BASE_DIR, "instance", "bestkorea.db"))
-    # Render/Heroku 형식(postgres://, postgresql://)을 psycopg3 드라이버 형식으로
+    # postgres:// · postgresql:// 형식을 psycopg3 드라이버 형식으로
     for prefix in ("postgres://", "postgresql://"):
         if url.startswith(prefix):
             return "postgresql+psycopg://" + url[len(prefix):]
@@ -22,10 +22,7 @@ def _bool(name, default=False):
 
 class Config:
     SITE_NAME = os.environ.get("SITE_NAME", "BestKorea")
-    # Render 는 RENDER_EXTERNAL_URL(https://xxx.onrender.com)을 자동으로 넣어준다
-    SITE_URL = (
-        os.environ.get("SITE_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "http://localhost:5000"
-    ).rstrip("/")
+    SITE_URL = os.environ.get("SITE_URL", "http://localhost:5000").rstrip("/")
     SITE_DESCRIPTION = os.environ.get(
         "SITE_DESCRIPTION",
         "해외에서 본 한국 - 미국·일본·중국·유럽·남미·호주 언론과 Reddit의 한국 관련 뉴스와 현지 반응",
@@ -40,7 +37,7 @@ class Config:
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_SECURE = _bool("SESSION_COOKIE_SECURE", False)
     REMEMBER_COOKIE_SECURE = SESSION_COOKIE_SECURE
-    # HTTPS 리버스 프록시(Render, nginx) 뒤에서 실행할 때 true
+    # HTTPS 리버스 프록시(nginx 등) 뒤에서 실행할 때 true
     BEHIND_PROXY = _bool("BEHIND_PROXY", False)
     # 이 이메일로 가입한 회원이 관리자가 됨. 비워 두면 첫 번째 가입자가 관리자
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "").strip().lower()

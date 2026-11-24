@@ -45,22 +45,34 @@ FLASK_APP=wsgi .venv/bin/flask run
 
 수집 소스는 `app/collector/sources.py` 한 파일에서 추가/삭제합니다.
 
-## Render 배포 (권장)
+## Docker로 실행 (웹 + 수집기 + PostgreSQL)
 
-저장소에 `render.yaml`이 있어 웹 서버, 3시간마다 수집(cron), PostgreSQL이 한 번에 만들어집니다 (싱가포르 리전).
+Docker Desktop(또는 Docker Engine + Compose)만 있으면 됩니다.
 
-1. https://dashboard.render.com 가입 → GitHub 계정 연결 (bestkorea 저장소 접근 허용)
-2. **New → Blueprint** → `befree00-dev/bestkorea` 선택
-3. 입력 칸이 나오면:
-   - `ADMIN_EMAIL`: 관리자로 쓸 본인 이메일 (**필수** — 이 이메일로 가입해야 관리자가 됨)
-   - 나머지(`SITE_URL`, `ADSENSE_*`, `ANTHROPIC_API_KEY`, `REDDIT_*`)는 비워 두고 나중에 입력 가능
-4. **Apply** → 빌드가 끝나면 `https://bestkorea.onrender.com` (또는 비슷한 주소) 접속
-5. `ADMIN_EMAIL`로 회원가입 → 상단 **관리** → **지금 수집 실행**으로 첫 수집
+```bash
+cp .env.example .env              # ADMIN_EMAIL 등 필요한 값만 수정 (없어도 실행됨)
+docker compose up -d --build      # http://localhost:8000
+```
 
-예상 비용: 웹 Starter $7 + Postgres basic-256mb 약 $6 + cron(실행 시간만큼, 월 $1 내외) / 월.
-`main` 브랜치에 push하면 자동으로 다시 배포됩니다.
+| 컨테이너 | 역할 |
+|---|---|
+| `web` | gunicorn 웹 서버 (포트 8000, `WEB_PORT`로 변경) |
+| `collector` | 시작 직후 한 번 수집, 이후 `COLLECT_EVERY_SECONDS`(기본 10800초=3시간)마다 수집 |
+| `db` | PostgreSQL 16, 데이터는 `pgdata` 볼륨에 보존 |
 
-도메인 연결: 웹 서비스 → Settings → Custom Domains에 도메인 추가 → 안내된 DNS 레코드를 도메인 업체에 등록 → 환경 변수 `SITE_URL=https://도메인` 설정.
+자주 쓰는 명령:
+
+```bash
+docker compose logs -f collector                 # 수집 로그
+docker compose exec web flask collect            # 지금 바로 수집
+docker compose exec web flask seed-demo          # 샘플 데이터 (테스트용)
+docker compose exec web flask make-admin 이메일    # 관리자 지정
+docker compose down                              # 중지 (데이터 유지)
+docker compose down -v                           # 중지 + DB 데이터 삭제
+```
+
+`.env`에서 `ADMIN_EMAIL`을 지정하면 그 이메일로 가입한 회원만 관리자가 됩니다 (비우면 첫 가입자).
+`docker-compose.yml`의 DB 비밀번호는 로컬 테스트용이므로 인터넷에 공개하는 서버에서는 바꾸세요.
 
 ## 직접 서버 운영 예시
 

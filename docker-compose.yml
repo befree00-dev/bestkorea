@@ -1,0 +1,73 @@
+# 로컬 테스트용: 웹 + 수집기 + PostgreSQL
+#   docker compose up -d --build      → http://localhost:8000
+# 설정은 같은 폴더의 .env 파일 값이 있으면 그 값을, 없으면 아래 기본값을 사용합니다.
+name: bestkorea
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql://bestkorea:bestkorea@db:5432/bestkorea
+  SECRET_KEY: ${SECRET_KEY:-local-docker-secret-change-me}
+  SITE_URL: ${SITE_URL:-http://localhost:8000}
+  ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+  SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+  BEHIND_PROXY: ${BEHIND_PROXY:-false}
+  ENABLE_SCHEDULER: "false"
+  SHOW_AD_PLACEHOLDERS: ${SHOW_AD_PLACEHOLDERS:-true}
+  ADSENSE_CLIENT: ${ADSENSE_CLIENT:-}
+  ADSENSE_SLOT_TOP: ${ADSENSE_SLOT_TOP:-}
+  ADSENSE_SLOT_SIDEBAR: ${ADSENSE_SLOT_SIDEBAR:-}
+  ADSENSE_SLOT_IN_ARTICLE: ${ADSENSE_SLOT_IN_ARTICLE:-}
+  ADSENSE_SLOT_IN_FEED: ${ADSENSE_SLOT_IN_FEED:-}
+  DAILY_TARGET: ${DAILY_TARGET:-10}
+  COLLECT_MAX_PER_RUN: ${COLLECT_MAX_PER_RUN:-40}
+  REDDIT_CLIENT_ID: ${REDDIT_CLIENT_ID:-}
+  REDDIT_CLIENT_SECRET: ${REDDIT_CLIENT_SECRET:-}
+  TRANSLATE_ENABLED: ${TRANSLATE_ENABLED:-false}
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+  ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-claude-opus-5-5}
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bestkorea
+      POSTGRES_PASSWORD: bestkorea
+      POSTGRES_DB: bestkorea
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bestkorea -d bestkorea"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  web:
+    build: .
+    image: bestkorea:latest
+    environment: *app-env
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/robots.txt')"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  # 시작하자마자 한 번 수집하고, 이후 COLLECT_EVERY_SECONDS(기본 3시간)마다 반복
+  collector:
+    image: bestkorea:latest
+    environment:
+      <<: *app-env
+      COLLECT_EVERY_SECONDS: ${COLLECT_EVERY_SECONDS:-10800}
+    command: ["python", "collect_loop.py"]
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
