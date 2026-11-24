@@ -83,7 +83,7 @@ def save_item(item, cfg):
             reactions_ko = result.reactions_ko
     category = category or classify(f"{item.title} {item.summary}")
     if category not in NEWS_BOARDS:
-        category = "politics"
+        category = "fun"  # 분류 불가 → 기타
 
     body = summary
     if item.article_url:

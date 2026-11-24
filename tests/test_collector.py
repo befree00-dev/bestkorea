@@ -100,7 +100,7 @@ def test_fetch_reddit_filters_and_reactions():
     ("BLACKPINK announce world tour", "entertainment"),
     ("T1 Faker wins Worlds again", "game"),
     ("韓国の大統領が来日", "politics"),
-    ("Something with no keywords", "politics"),
+    ("Something with no keywords", "fun"),
 ])
 def test_classify(text, cat):
     assert classify(text) == cat

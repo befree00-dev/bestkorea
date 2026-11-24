@@ -1,4 +1,4 @@
-"""다국어 키워드 기반 카테고리 분류기 (Claude 번역을 끈 경우 사용)."""
+"""다국어 키워드 기반 카테고리 분류기 (Claude 번역을 끈 경우 사용). 키워드가 없으면 기타(fun)."""
 import re
 
 KEYWORDS = {
@@ -44,7 +44,7 @@ _PATTERNS = {
 }
 
 
-def classify(text, default="politics"):
+def classify(text, default="fun"):
     text = f" {(text or '').lower()} "
     scores = {cat: sum(1 for p in pats if p.search(text)) for cat, pats in _PATTERNS.items()}
     best = max(scores, key=scores.get)
