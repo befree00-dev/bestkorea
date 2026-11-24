@@ -117,33 +117,47 @@ def test_classify(text, cat):
 
 def test_collection_goes_to_inbox_not_site(app):
     app.config.update(COLLECT_MAX_PER_RUN=100)
-    run = collector.run_collection(FakeSession())
-    assert run.added > 10 and run.errors == ""
+    session = FakeSession()
+    run = collector.run_collection(session)
+    assert run.added == 8 and run.errors == ""  # Reddit 8개 소스 × 댓글 10개 이상 글 1개
     assert Post.query.count() == 0  # 사이트에는 자동 게시하지 않음
-    assert CollectedItem.query.count() == run.added
-    reddit = CollectedItem.query.filter_by(source_type="reddit").first()
-    assert reddit.num_comments == 42 and [c["author"] for c in reddit.comments] == ["alice", "carol"]
-    jp = CollectedItem.query.filter(CollectedItem.url.like("%/a1"), CollectedItem.country == "jp").first()
-    assert jp.source_type == "gnews" and jp.category_hint == "economy" and jp.status == "new"
+    items = CollectedItem.query.all()
+    assert all(i.source_type == "reddit" and i.num_comments >= 10 for i in items)
+    assert [c["author"] for c in items[0].comments] == ["alice", "carol"]
+    assert not any("news.google.com" in u for u in session.calls)  # 댓글 없는 뉴스는 가져오지도 않음
     # 다시 실행해도 중복 저장 없음
-    n = CollectedItem.query.count()
-    assert collector.run_collection(FakeSession()).added == 0 and CollectedItem.query.count() == n
+    assert collector.run_collection(FakeSession()).added == 0 and CollectedItem.query.count() == 8
     assert CollectLog.query.count() == 2
 
 
+def test_min_comments_threshold_is_configurable(app):
+    app.config.update(MIN_COMMENTS=50, COLLECT_MAX_PER_RUN=100)
+    assert collector.run_collection(FakeSession()).added == 0  # 테스트 글은 댓글 42개
+
+
+def test_news_without_comments_can_be_included(app):
+    app.config.update(INCLUDE_NEWS_WITHOUT_COMMENTS=True, COLLECT_MAX_PER_RUN=100)
+    run = collector.run_collection(FakeSession())
+    assert run.errors == ""
+    gnews = CollectedItem.query.filter_by(source_type="gnews").all()
+    assert gnews and all(i.num_comments == 0 for i in gnews)
+    jp = CollectedItem.query.filter(CollectedItem.url.like("%/a1"), CollectedItem.country == "jp").first()
+    assert jp.category_hint == "economy" and jp.status == "new"
+
+
 def test_collection_cap_errors_and_mix(app):
-    app.config.update(COLLECT_MAX_PER_RUN=6)
+    app.config.update(INCLUDE_NEWS_WITHOUT_COMMENTS=True, COLLECT_MAX_PER_RUN=6)
     run = collector.run_collection(FakeSession(fail=("reddit.com/r/kpop",)))
     assert run.added == 6 and "rd-kpop" in run.errors
     assert len({i.country for i in CollectedItem.query.all()}) >= 3
 
 
-def test_reddit_skipped_without_keys(app):
+def test_no_reddit_keys_means_nothing_to_collect(app):
     app.config.update(REDDIT_CLIENT_ID="", REDDIT_CLIENT_SECRET="", COLLECT_MAX_PER_RUN=100)
     session = FakeSession()
     run = collector.run_collection(session)
-    assert run.errors == "" and run.added > 0
-    assert not any("reddit.com" in u for u in session.calls)
+    assert run.added == 0 and session.calls == []
+    assert "Reddit API 키" in run.errors  # 관리자 페이지 수집 기록에 이유가 표시됨
 
 
 def test_reddit_uses_oauth_with_keys(app):

@@ -5,8 +5,11 @@
 <div class="board-head">
   <div>
     <h1>수집함</h1>
-    <p class="muted">관리자·운영자 전용. 수집된 해외 뉴스와 게시물(댓글 {{ cfg.MIN_COMMENTS }}개 이상)을 번역해 해외 반응 게시판에 올리세요.
-      {% if not reddit_on %}<br>Reddit: 꺼짐 (API 키 없음){% endif %}</p>
+    <p class="muted">관리자·운영자 전용. 댓글 {{ cfg.MIN_COMMENTS }}개 이상인 한국 관련 해외 글을 번역해 해외 반응 게시판에 올리세요.</p>
+    {% if not reddit_on and not cfg.INCLUDE_NEWS_WITHOUT_COMMENTS %}
+    <div class="flash flash-danger">Reddit API 키(REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET)가 없어 새 글이 수집되지 않습니다.
+      댓글 수를 알 수 있는 수집 소스는 현재 Reddit뿐입니다.</div>
+    {% endif %}
   </div>
   {% if current_user.is_admin %}
   <form action="{{ url_for('admin.collect_now') }}" method="post">

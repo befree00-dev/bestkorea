@@ -12,7 +12,8 @@
     <div><strong class="{{ 'ok' if today >= cfg.DAILY_TARGET else 'warn' }}">{{ today }}</strong><span>최근 24시간 수집 (목표 {{ cfg.DAILY_TARGET }}+)</span></div>
   </div>
   <p class="muted">자동 수집: {{ cfg.COLLECT_INTERVAL_MINUTES ~ '분 간격 (웹 내장)' if cfg.ENABLE_SCHEDULER else '수집기 컨테이너/cron 에서 실행' }} ·
-     Reddit: {{ '켜짐 (API 키)' if reddit_on else '꺼짐 (API 키 없음 — REDDIT_CLIENT_ID/SECRET 설정 시 자동으로 켜짐)' }} ·
+     수집 기준: 댓글 {{ cfg.MIN_COMMENTS }}개 이상{{ ' + 댓글 없는 뉴스 포함' if cfg.INCLUDE_NEWS_WITHOUT_COMMENTS }} ·
+     Reddit: {{ '켜짐 (API 키)' if reddit_on else '꺼짐 (API 키 없음 — 설정 전까지 새 글이 수집되지 않음)' }} ·
      번역 모델: {{ cfg.ANTHROPIC_MODEL }} ·
      AdSense: {{ cfg.ADSENSE_CLIENT or '미설정' }}</p>
   <div class="actions" style="justify-content:flex-start">

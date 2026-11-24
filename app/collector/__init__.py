@@ -1,5 +1,6 @@
 """해외 한국 관련 뉴스/게시물 수집기.
 
+댓글이 MIN_COMMENTS(기본 10)개 이상인 글만 수집한다. 뉴스 RSS 에는 댓글이 없으므로 기본적으로 제외된다.
 수집한 글은 사이트에 바로 게시되지 않고 '수집함'(CollectedItem)에만 쌓인다.
 관리자·운영자가 수집함에서 번역한 뒤 직접 게시글로 올린다.
 
@@ -21,6 +22,12 @@ from .sources import REDDIT_SOURCES, RSS_SOURCES
 log = logging.getLogger(__name__)
 
 
+NO_SOURCE_MESSAGE = (
+    "수집할 소스가 없습니다: 댓글이 있는 글은 Reddit 에서만 가져오는데 Reddit API 키"
+    "(REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET)가 설정되지 않았습니다."
+)
+
+
 def today_collected_count():
     return CollectedItem.query.filter(CollectedItem.collected_at >= utcnow() - timedelta(days=1)).count()
 
@@ -39,13 +46,17 @@ def gather(cfg, session=None, per_source=4):
     """모든 소스에서 항목을 모은다. (소스별 결과 리스트, 오류 목록) 반환."""
     session = session or _new_session(cfg)
     results, errors = [], []
-    for src in RSS_SOURCES:
-        try:
-            results.append(fetch_rss(src, session, per_source))
-        except Exception as exc:
-            errors.append(f"{src['id']}: {exc}")
+    # 뉴스 RSS(Google News)에는 댓글이 없으므로 기본적으로 수집하지 않는다 (댓글 MIN_COMMENTS 개 이상만 수집)
+    if cfg.get("INCLUDE_NEWS_WITHOUT_COMMENTS"):
+        for src in RSS_SOURCES:
+            try:
+                results.append(fetch_rss(src, session, per_source))
+            except Exception as exc:
+                errors.append(f"{src['id']}: {exc}")
     if not reddit_enabled(cfg):
         # Reddit 은 키 없는 요청을 차단(403)하므로 키가 있을 때만 수집
+        if not results:
+            errors.append(NO_SOURCE_MESSAGE)
         return results, errors
     reddit = RedditClient(session, cfg["REDDIT_CLIENT_ID"], cfg["REDDIT_CLIENT_SECRET"], cfg["HTTP_USER_AGENT"])
     for src in REDDIT_SOURCES:
@@ -72,6 +83,12 @@ def _interleave(lists):
         if lst:
             by_country.setdefault(lst[0].country, []).append(lst)
     yield from _round_robin([list(_round_robin(group)) for group in by_country.values()])
+
+
+def has_enough_comments(item, cfg):
+    if cfg.get("INCLUDE_NEWS_WITHOUT_COMMENTS") and item.country != "reddit":
+        return True
+    return (item.num_comments or 0) >= cfg["MIN_COMMENTS"]
 
 
 def save_item(item):
@@ -115,6 +132,9 @@ def run_collection(session=None):
     for item in _interleave(lists):
         if added >= cfg["COLLECT_MAX_PER_RUN"]:
             break
+        if not has_enough_comments(item, cfg):
+            skipped += 1
+            continue
         try:
             if save_item(item):
                 added += 1

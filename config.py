@@ -60,7 +60,9 @@ class Config:
     COLLECT_MAX_PER_SOURCE = int(os.environ.get("COLLECT_MAX_PER_SOURCE", 4))
     COLLECT_MAX_PER_RUN = int(os.environ.get("COLLECT_MAX_PER_RUN", 40))
     DAILY_TARGET = int(os.environ.get("DAILY_TARGET", 10))
-    MIN_COMMENTS = int(os.environ.get("MIN_COMMENTS", 10))  # 커뮤니티 글은 댓글이 이만큼 이상일 때만 수집
+    MIN_COMMENTS = int(os.environ.get("MIN_COMMENTS", 10))  # 댓글이 이만큼 이상인 글만 수집
+    # true 면 댓글 정보가 없는 뉴스 RSS(Google News)도 수집 (기본: 제외)
+    INCLUDE_NEWS_WITHOUT_COMMENTS = _bool("INCLUDE_NEWS_WITHOUT_COMMENTS", False)
     COMMENTS_PER_ITEM = int(os.environ.get("COMMENTS_PER_ITEM", 50))  # 글당 저장·번역할 댓글 수 (인기순)
     HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "web:bestkorea-collector:1.0")
     # 원문 기사 본문을 가져올 때 쓰는 브라우저 User-Agent (일부 언론사는 봇 UA를 차단)
