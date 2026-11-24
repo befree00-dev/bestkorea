@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "auth/_field.html" import field %}
+{% block title %}회원가입{% endblock %}
+{% block sidebar %}{% endblock %}
+{% block layout_class %}narrow{% endblock %}
+{% block content %}
+<div class="box form-box">
+  <h1>회원가입</h1>
+  <p class="muted">글 읽기는 가입 없이 가능해요. 가입하면 뉴스 제보, 글쓰기, 댓글, 추천을 할 수 있습니다.</p>
+  <form method="post">
+    {{ form.hidden_tag() }}
+    {{ field(form.username, autocomplete="nickname", maxlength=20) }}
+    {{ field(form.email, type="email", autocomplete="email") }}
+    {{ field(form.password, autocomplete="new-password", minlength=8) }}
+    {{ field(form.password2, autocomplete="new-password") }}
+    {{ field(form.agree) }}
+    <p class="small muted"><a href="{{ url_for('main.terms') }}" target="_blank">이용약관</a> ·
+      <a href="{{ url_for('main.privacy') }}" target="_blank">개인정보처리방침</a></p>
+    <button class="btn btn-primary block">가입하기</button>
+  </form>
+  <p class="center">이미 회원이신가요? <a href="{{ url_for('auth.login') }}">로그인</a></p>
+</div>
+{% endblock %}

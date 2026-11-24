@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}관리자{% endblock %}
+{% block sidebar %}{% endblock %}
+{% block content %}
+<div class="box">
+  <h1>관리자 대시보드</h1>
+  <div class="stats">
+    <div><strong class="{{ 'ok' if today >= cfg.DAILY_TARGET else 'warn' }}">{{ today }}</strong><span>최근 24시간 수집 (목표 {{ cfg.DAILY_TARGET }}+)</span></div>
+    <div><strong>{{ stats.posts }}</strong><span>전체 글</span></div>
+    <div><strong>{{ stats.comments }}</strong><span>댓글</span></div>
+    <div><strong>{{ stats.users }}</strong><span>회원</span></div>
+  </div>
+  <p class="muted">자동 수집: {{ '켜짐 (' ~ cfg.COLLECT_INTERVAL_MINUTES ~ '분 간격)' if cfg.ENABLE_SCHEDULER else '꺼짐 (cron으로 flask collect 실행)' }} ·
+     번역: {{ '켜짐 (' ~ cfg.ANTHROPIC_MODEL ~ ')' if cfg.TRANSLATE_ENABLED else '꺼짐' }} ·
+     AdSense: {{ cfg.ADSENSE_CLIENT or '미설정' }}</p>
+  <form action="{{ url_for('admin.collect_now') }}" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-primary">지금 수집 실행</button>
+  </form>
+</div>
+
+<div class="box">
+  <h2>수집 기록</h2>
+  <table class="table">
+    <thead><tr><th>시작</th><th>추가</th><th>중복</th><th>오류</th></tr></thead>
+    <tbody>
+    {% for l in logs %}
+      <tr><td>{{ l.started_at.strftime('%m-%d %H:%M') }}</td><td>{{ l.added }}</td><td>{{ l.skipped }}</td>
+        <td>{% if l.errors %}<details><summary>{{ l.errors.split('\n')|length }}건</summary><pre>{{ l.errors }}</pre></details>{% else %}-{% endif %}</td></tr>
+    {% else %}<tr><td colspan="4">기록 없음</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="box">
+  <h2>최근 가입 회원</h2>
+  <table class="table">
+    <thead><tr><th>닉네임</th><th>이메일</th><th>가입일</th><th></th></tr></thead>
+    <tbody>
+    {% for u in users %}
+      <tr><td>{{ u.username }}{% if u.is_admin %} (관리자){% endif %}</td><td>{{ u.email }}</td><td>{{ u.created_at.strftime('%Y-%m-%d') }}</td>
+        <td>{% if u.id != current_user.id %}
+          <form action="{{ url_for('admin.toggle_ban', user_id=u.id) }}" method="post" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn small {{ 'btn-danger' if not u.is_banned }}">{{ '제한 해제' if u.is_banned else '이용 제한' }}</button>
+          </form>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

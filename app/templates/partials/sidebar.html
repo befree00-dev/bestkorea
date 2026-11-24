@@ -1,0 +1,17 @@
+{% from "partials/ad.html" import ad with context %}
+<section class="box">
+  <h3>국가별 해외 반응</h3>
+  <ul class="country-list">
+    {% for code, (name, flag) in COUNTRIES.items() if code != 'etc' %}
+      <li><a href="{{ url_for('main.news', country=code) }}">{{ flag }} {{ name }}</a></li>
+    {% endfor %}
+  </ul>
+</section>
+{{ ad(cfg.ADSENSE_SLOT_SIDEBAR, 'auto', 'ad-sidebar') }}
+{% if not current_user.is_authenticated %}
+<section class="box join-box">
+  <h3>함께 이야기해요</h3>
+  <p>글 읽기는 누구나 가능! 해외 뉴스 제보, 글쓰기와 댓글은 회원가입 후 이용할 수 있어요.</p>
+  <a class="btn btn-primary block" href="{{ url_for('auth.signup') }}">무료 회원가입</a>
+</section>
+{% endif %}

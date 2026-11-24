@@ -1,0 +1,93 @@
+<!doctype html>
+{%- if false %}{% block title %}{% endblock %}{% endif -%}
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% set page_title = (self.title() ~ ' - ' ~ cfg.SITE_NAME) if self.title() else (cfg.SITE_NAME ~ ' - 해외에서 본 한국') %}
+  <title>{{ page_title }}</title>
+  <meta name="description" content="{% block description %}{{ cfg.SITE_DESCRIPTION }}{% endblock %}">
+  <meta property="og:site_name" content="{{ cfg.SITE_NAME }}">
+  <meta property="og:title" content="{{ page_title }}">
+  <meta property="og:description" content="{{ self.description() }}">
+  <meta property="og:type" content="{% block og_type %}website{% endblock %}">
+  <meta property="og:url" content="{{ cfg.SITE_URL }}{{ request.path }}">
+  {% block og_image %}{% endblock %}
+  <link rel="canonical" href="{{ cfg.SITE_URL }}{{ request.path }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% if cfg.ADSENSE_CLIENT %}
+  <meta name="google-adsense-account" content="{{ cfg.ADSENSE_CLIENT }}">
+  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client={{ cfg.ADSENSE_CLIENT }}" crossorigin="anonymous"></script>
+  {% endif %}
+  {% if cfg.GOOGLE_ANALYTICS_ID %}
+  <script async src="https://www.googletagmanager.com/gtag/js?id={{ cfg.GOOGLE_ANALYTICS_ID }}"></script>
+  <script>window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','{{ cfg.GOOGLE_ANALYTICS_ID }}');</script>
+  {% endif %}
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap header-row">
+    <a class="logo" href="{{ url_for('main.index') }}">Best<span>Korea</span></a>
+    <form class="search" action="{{ url_for('main.search') }}" method="get" role="search">
+      <input type="search" name="q" placeholder="해외 반응 검색" value="{{ request.args.get('q', '') }}" aria-label="검색">
+    </form>
+    <nav class="user-nav">
+      {% if current_user.is_authenticated %}
+        <a class="btn btn-primary" href="{{ url_for('main.write', board=board if board else None) }}">글쓰기</a>
+        {% if current_user.is_admin %}<a href="{{ url_for('admin.dashboard') }}">관리</a>{% endif %}
+        <span class="me">{{ current_user.username }}</span>
+        <form action="{{ url_for('auth.logout') }}" method="post" class="inline">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="link">로그아웃</button>
+        </form>
+      {% else %}
+        <a href="{{ url_for('auth.login', next=request.path) }}">로그인</a>
+        <a class="btn btn-primary" href="{{ url_for('auth.signup') }}">회원가입</a>
+      {% endif %}
+    </nav>
+  </div>
+  <nav class="board-nav" aria-label="게시판">
+    <div class="wrap board-nav-row">
+      <a href="{{ url_for('main.news') }}" class="{{ 'active' if request.endpoint == 'main.news' }}">전체</a>
+      {% for slug in NEWS_BOARDS %}
+        <a href="{{ url_for('main.board_list', board=slug) }}" class="{{ 'active' if board == slug }}">{{ BOARDS[slug][0] }}</a>
+      {% endfor %}
+      <span class="sep" aria-hidden="true"></span>
+      {% for slug in COMMUNITY_BOARDS %}
+        <a href="{{ url_for('main.board_list', board=slug) }}" class="community {{ 'active' if board == slug }}">{{ BOARDS[slug][0] }}</a>
+      {% endfor %}
+    </div>
+  </nav>
+</header>
+
+<div class="wrap">
+  {% from "partials/ad.html" import ad with context %}
+  {{ ad(cfg.ADSENSE_SLOT_TOP, 'horizontal', 'ad-top') }}
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}<div class="flash flash-{{ cat }}">{{ msg }}</div>{% endfor %}
+  {% endwith %}
+
+  <div class="layout {% block layout_class %}{% endblock %}">
+    <main class="main">{% block content %}{% endblock %}</main>
+    {% block sidebar %}
+    <aside class="sidebar">
+      {% include "partials/sidebar.html" %}
+    </aside>
+    {% endblock %}
+  </div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p><strong>{{ cfg.SITE_NAME }}</strong> · 해외 언론과 커뮤니티의 한국 관련 소식을 모아 소개합니다.
+      모든 기사의 저작권은 원 매체에 있으며, 원문 링크를 통해 전문을 확인하세요.</p>
+    <p class="footer-links">
+      <a href="{{ url_for('main.about') }}">사이트 소개</a> ·
+      <a href="{{ url_for('main.terms') }}">이용약관</a> ·
+      <a href="{{ url_for('main.privacy') }}"><strong>개인정보처리방침</strong></a>
+    </p>
+  </div>
+</footer>
+</body>
+</html>

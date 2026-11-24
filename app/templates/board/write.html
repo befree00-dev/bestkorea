@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}{{ '글 수정' if post else '글쓰기' }}{% endblock %}
+{% macro field(f, hint='') %}
+  <div class="field">
+    {{ f.label }}
+    {{ f(**kwargs) }}
+    {% if hint %}<small class="muted">{{ hint }}</small>{% endif %}
+    {% for e in f.errors %}<div class="error">{{ e }}</div>{% endfor %}
+  </div>
+{% endmacro %}
+{% block content %}
+<div class="box form-box">
+  <h1>{{ '글 수정' if post else '글쓰기' }}</h1>
+  <form method="post">
+    {{ form.hidden_tag() }}
+    {{ field(form.board) }}
+    {{ field(form.title, maxlength=200) }}
+    {{ field(form.body, rows=14, hint='HTML은 사용할 수 없으며, 링크는 자동으로 연결됩니다. 해외 기사 전문 복사 대신 요약과 원문 링크를 남겨주세요.') }}
+    <fieldset class="news-fields">
+      <legend>해외 뉴스 제보 (선택)</legend>
+      {{ field(form.source_url, placeholder='https://') }}
+      {{ field(form.country) }}
+    </fieldset>
+    <div class="actions">
+      <button class="btn btn-primary">{{ '수정' if post else '등록' }}</button>
+      <a class="btn" href="javascript:history.back()">취소</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

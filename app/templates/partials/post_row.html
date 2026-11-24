@@ -1,0 +1,19 @@
+<li class="post-row">
+  <a class="post-link" href="{{ url_for('main.post_detail', board=p.board, post_id=p.id) }}">
+    {% if p.image_url %}<img class="thumb" src="{{ p.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer">{% endif %}
+    <div class="post-text">
+      <div class="post-title">
+        {% if p.country %}<span class="flag" title="{{ country_label(p.country) }}">{{ COUNTRIES.get(p.country, COUNTRIES['etc'])[1] }}</span>{% endif %}
+        {{ p.title }}
+        {% if p.comment_count or p.reactions %}<span class="cnt">[{{ p.comment_count + (p.reactions|length) }}]</span>{% endif %}
+      </div>
+      <div class="meta">
+        {% if show_board %}<span class="tag">{{ board_name(p.board) }}</span>{% endif %}
+        <span>{{ p.source_name if p.is_collected and p.source_name else p.author_name }}</span>
+        <span>{{ p.created_at|timeago }}</span>
+        <span>조회 {{ p.views }}</span>
+        {% if p.like_count %}<span class="likes">추천 {{ p.like_count }}</span>{% endif %}
+      </div>
+    </div>
+  </a>
+</li>

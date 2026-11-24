@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "partials/ad.html" import ad with context %}
+{% block title %}{{ title }}{% endblock %}
+{% block description %}{{ BOARDS[board][2] if board else cfg.SITE_DESCRIPTION }}{% endblock %}
+{% block content %}
+<div class="board-head">
+  <div>
+    <h1>{{ title }}</h1>
+    {% if board %}<p class="muted">{{ BOARDS[board][2] }}</p>{% endif %}
+  </div>
+  {% if board %}
+    <a class="btn btn-primary" href="{{ url_for('main.write', board=board) if current_user.is_authenticated else url_for('auth.login', next=url_for('main.write', board=board)) }}">
+      {{ '뉴스 제보' if BOARDS[board][1] == 'news' else '글쓰기' }}</a>
+  {% endif %}
+</div>
+
+{% if not board or BOARDS[board][1] == 'news' %}
+<div class="chips">
+  <a class="chip {{ 'active' if not request.args.get('country') }}" href="{{ url_with(country=None, page=None) }}">전체</a>
+  {% for code, (name, flag) in COUNTRIES.items() if code != 'etc' %}
+    <a class="chip {{ 'active' if request.args.get('country') == code }}" href="{{ url_with(country=code, page=None) }}">{{ flag }} {{ name }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if board %}
+<div class="sort">
+  <a class="{{ 'active' if request.args.get('sort') != 'best' }}" href="{{ url_with(sort=None, page=None) }}">최신순</a>
+  <a class="{{ 'active' if request.args.get('sort') == 'best' }}" href="{{ url_with(sort='best', page=None) }}">추천순</a>
+</div>
+{% endif %}
+
+<ul class="post-list box">
+  {% for p in pagination.items %}
+    {% set show_board = not board %}
+    {% include "partials/post_row.html" %}
+    {% if loop.index == 8 %}<li>{{ ad(cfg.ADSENSE_SLOT_IN_FEED, 'auto', 'ad-infeed') }}</li>{% endif %}
+  {% else %}
+    <li class="empty">게시글이 없습니다.</li>
+  {% endfor %}
+</ul>
+
+{% if pagination.pages > 1 %}
+<nav class="pager" aria-label="페이지">
+  {% if pagination.has_prev %}<a href="{{ url_with(page=pagination.prev_num) }}">‹ 이전</a>{% endif %}
+  {% for n in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+    {% if n %}<a class="{{ 'active' if n == pagination.page }}" href="{{ url_with(page=n) }}">{{ n }}</a>{% else %}<span>…</span>{% endif %}
+  {% endfor %}
+  {% if pagination.has_next %}<a href="{{ url_with(page=pagination.next_num) }}">다음 ›</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}
