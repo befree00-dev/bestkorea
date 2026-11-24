@@ -1,33 +1,26 @@
-"""외부 소스에서 항목을 가져오는 함수들. 네트워크는 주입된 requests.Session 으로만 사용합니다."""
+"""수집기 공통: 수집 항목 형식과 텍스트 정리."""
 import html
-import logging
 import re
-import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-
-import feedparser
-
-log = logging.getLogger(__name__)
+from datetime import datetime
 
 TIMEOUT = 15
-SUMMARY_LIMIT = 300  # 저작권 보호: 원문 전문이 아닌 짧은 발췌만 저장
-REACTION_LIMIT = 2000
+COMMENT_LIMIT = 2000  # 댓글 1개 최대 글자 수
 
 
 @dataclass
 class Item:
-    source_id: str
+    site: str  # youtube / yahoo_jp / baidu ...
+    external_id: str  # 사이트 안에서의 글 ID (예: YouTube videoId)
     title: str
     url: str
     country: str
     lang: str
-    summary: str = ""
-    source_name: str = ""
+    summary: str = ""  # 영상 설명·본문 발췌
+    source_name: str = ""  # 채널명·매체명
     category: str | None = None
     published_at: datetime | None = None
     image_url: str | None = None
-    article_url: str | None = None  # Reddit 글이 링크한 외부 기사
     num_comments: int = 0
     reactions: list = field(default_factory=list)  # [{"author","body","score"}]
 
@@ -41,159 +34,13 @@ def clean_text(raw, limit=None):
     return text
 
 
-def _struct_to_dt(st):
-    if not st:
-        return None
-    return datetime.fromtimestamp(time.mktime(st), tz=timezone.utc).replace(tzinfo=None)
+_HANGUL = re.compile(r"[가-힣]")
+_LETTER = re.compile(r"\w", re.UNICODE)
 
 
-# ------------------------------------------------------------------ RSS (Google News 등)
-def fetch_rss(source, session, limit):
-    resp = session.get(source["url"], timeout=TIMEOUT)
-    resp.raise_for_status()
-    feed = feedparser.parse(resp.content)
-    items = []
-    for entry in feed.entries[: limit * 3]:
-        title = clean_text(entry.get("title"))
-        source_name = ""
-        src = entry.get("source")
-        if src and src.get("title"):
-            source_name = src["title"]
-            suffix = f" - {source_name}"
-            if title.endswith(suffix):
-                title = title[: -len(suffix)]
-        link = entry.get("link")
-        if not title or not link:
-            continue
-        summary = clean_text(entry.get("summary"), SUMMARY_LIMIT)
-        # Google News 요약은 제목+매체명 반복이 대부분 → 의미 없으면 비움
-        if summary.startswith(title[:30]):
-            summary = ""
-        items.append(
-            Item(
-                source_id=source["id"],
-                title=title,
-                url=link,
-                country=source["country"],
-                lang=source["lang"],
-                summary=summary,
-                source_name=source_name or feed.feed.get("title", ""),
-                category=source.get("category"),
-                published_at=_struct_to_dt(entry.get("published_parsed")),
-            )
-        )
-        if len(items) >= limit:
-            break
-    return items
-
-
-# ------------------------------------------------------------------ Reddit
-class RedditClient:
-    """OAuth(client credentials) 키가 있으면 oauth.reddit.com, 없으면 공개 JSON 엔드포인트 사용."""
-
-    def __init__(self, session, client_id="", client_secret="", user_agent="web:bestkorea-collector:1.0"):
-        self.session = session
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.session.headers.setdefault("User-Agent", user_agent)
-        self._token = None
-        self.base = "https://www.reddit.com"
-
-    def _auth(self):
-        if not self.client_id or self._token:
-            return
-        resp = self.session.post(
-            "https://www.reddit.com/api/v1/access_token",
-            auth=(self.client_id, self.client_secret),
-            data={"grant_type": "client_credentials"},
-            timeout=TIMEOUT,
-        )
-        resp.raise_for_status()
-        self._token = resp.json()["access_token"]
-        self.session.headers["Authorization"] = f"bearer {self._token}"
-        self.base = "https://oauth.reddit.com"
-
-    def get(self, path, **params):
-        self._auth()
-        params.setdefault("raw_json", 1)
-        resp = self.session.get(f"{self.base}{path}", params=params, timeout=TIMEOUT)
-        resp.raise_for_status()
-        return resp.json()
-
-
-def _reddit_image(data):
-    url = data.get("url_overridden_by_dest") or data.get("url") or ""
-    if re.search(r"\.(jpe?g|png|gif|webp)$", url, re.I):
-        return url
-    try:
-        return html.unescape(data["preview"]["images"][0]["source"]["url"])
-    except (KeyError, IndexError, TypeError):
-        return None
-
-
-def fetch_reddit(source, client, limit, comments_per_item=50, min_comments=10):
-    """댓글이 min_comments 개 이상인 한국 관련 글만, 인기 댓글 최대 comments_per_item 개와 함께 가져온다."""
-    if source["mode"] == "search":
-        listing = client.get(
-            f"/r/{source['sub']}/search.json",
-            q=source["query"], restrict_sr=1, sort="top", t="day", limit=limit * 3,
-        )
-    else:
-        listing = client.get(f"/r/{source['sub']}/{source['mode']}.json", t="day", limit=limit * 3)
-
-    items = []
-    for child in listing.get("data", {}).get("children", []):
-        d = child.get("data", {})
-        if d.get("stickied") or d.get("over_18") or d.get("num_comments", 0) < min_comments:
-            continue
-        permalink = "https://www.reddit.com" + d["permalink"]
-        external = None if d.get("is_self") else (d.get("url_overridden_by_dest") or d.get("url"))
-        image = _reddit_image(d)
-        if external and ("reddit.com" in external or "redd.it" in external or external == image):
-            external = None
-        item = Item(
-            source_id=source["id"],
-            title=clean_text(d.get("title")),
-            url=permalink,
-            country="reddit",
-            lang="en",
-            summary=clean_text(d.get("selftext"), 5000),
-            source_name=f"r/{d.get('subreddit', source['sub'])}",
-            category=source.get("category"),
-            published_at=datetime.fromtimestamp(d.get("created_utc", time.time()), tz=timezone.utc).replace(
-                tzinfo=None
-            ),
-            image_url=image,
-            article_url=external,
-            num_comments=d.get("num_comments", 0),
-        )
-        try:
-            item.reactions = fetch_reddit_comments(client, d["subreddit"], d["id"], comments_per_item)
-        except Exception as exc:  # 댓글 실패해도 글은 저장
-            log.warning("reddit comments failed for %s: %s", d.get("id"), exc)
-        items.append(item)
-        if len(items) >= limit:
-            break
-    return items
-
-
-def fetch_reddit_comments(client, subreddit, post_id, limit):
-    data = client.get(f"/r/{subreddit}/comments/{post_id}.json", sort="top", limit=limit * 2, depth=1)
-    if not isinstance(data, list) or len(data) < 2:
-        return []
-    out = []
-    for child in data[1].get("data", {}).get("children", []):
-        if child.get("kind") != "t1":
-            continue
-        c = child["data"]
-        body = (c.get("body") or "").strip()
-        if not body or body in ("[deleted]", "[removed]") or c.get("stickied"):
-            continue
-        if (c.get("author") or "").lower() == "automoderator":
-            continue
-        out.append(
-            dict(author=c.get("author") or "unknown", body=clean_text(body, REACTION_LIMIT), score=c.get("score", 0))
-        )
-        if len(out) >= limit:
-            break
-    return out
+def mostly_korean(text, threshold=0.3):
+    """한글 비율이 높은 글(국내 콘텐츠)인지. '해외 반응'만 모으기 위해 제외할 때 사용."""
+    letters = _LETTER.findall(text or "")
+    if not letters:
+        return False
+    return len(_HANGUL.findall(text)) / len(letters) >= threshold

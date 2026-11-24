@@ -1,106 +1,173 @@
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 import pytest
 
 from app import collector
 from app.collector import translate as tr
+from app.collector import youtube
 from app.collector.classify import classify
-from app.collector.fetchers import RedditClient, fetch_reddit, fetch_rss
+from app.collector.fetchers import mostly_korean
 from app.extensions import db
 from app.models import CollectedItem, CollectLog, Post
 
-RSS = """<?xml version="1.0" encoding="UTF-8"?>
-<rss version="2.0"><channel><title>Google News</title>
-<item><title>Samsung shares jump on chip demand - Example Wire</title>
-  <link>https://news.example/{p}/a1</link><pubDate>Mon, 23 Nov 2026 10:00:00 GMT</pubDate>
-  <description>&lt;a href="x"&gt;Samsung shares jump on chip demand&lt;/a&gt;</description>
-  <source url="https://wire.example">Example Wire</source></item>
-<item><title>Son Heung-min scores twice - Sports Daily</title>
-  <link>https://news.example/{p}/a2</link><source url="https://sd.example">Sports Daily</source></item>
-<item><title>韓国の大統領が来日 - サンプル新聞</title>
-  <link>https://news.example/{p}/a3</link><source url="https://jp.example">サンプル新聞</source></item>
-</channel></rss>"""
-
-
-def reddit_listing(prefix):
-    posts = [
-        dict(id=f"{prefix}1", title="Seoul subway is amazing", permalink=f"/r/korea/comments/{prefix}1/x/",
-             subreddit="korea", score=500, num_comments=42, is_self=True, selftext="Just visited.",
-             created_utc=1764000000),
-        dict(id=f"{prefix}2", title="few comments", permalink=f"/r/korea/comments/{prefix}2/x/", subreddit="korea",
-             score=900, num_comments=9, is_self=True, created_utc=1764000000),
-        dict(id=f"{prefix}3", title="nsfw", permalink=f"/r/korea/comments/{prefix}3/x/", subreddit="korea",
-             score=900, num_comments=99, over_18=True, created_utc=1764000000),
-    ]
-    return {"data": {"children": [{"kind": "t3", "data": p} for p in posts]}}
-
-
-COMMENTS = [
-    {},
-    {"data": {"children": [
-        {"kind": "t1", "data": {"author": "AutoModerator", "body": "rules", "score": 1}},
-        {"kind": "t1", "data": {"author": "alice", "body": "Totally agree!", "score": 120}},
-        {"kind": "t1", "data": {"author": "bob", "body": "[deleted]", "score": 3}},
-        {"kind": "t1", "data": {"author": "carol", "body": "Best transit in the world", "score": 80}},
-        {"kind": "more", "data": {}},
-    ]}},
-]
+# videoId -> (댓글 수 또는 None=댓글 사용 중지, 제목, 오디오 언어)
+VIDEOS = {
+    "vid_en_0001": (5400, "Foreigners try Korean street food", "en"),
+    "vid_en_0002": (3100, "Why K-pop dominates the charts", "en"),
+    "vid_en_0003": (900, "Seoul subway tour", "en-US"),
+    "vid_en_0004": (9, "Only nine comments about Korea", "en"),  # 기준 미달
+    "vid_en_0005": (None, "Comments disabled Korea video", "en"),  # 댓글 사용 중지
+    "vid_ko_0006": (8000, "한국 예능 하이라이트 모음", "ko"),  # 한국어 영상 제외
+    "vid_ja_0007": (2500, "韓国旅行Vlog ソウル", "ja"),
+    "vid_ja_0008": (1500, "韓国の物価が高すぎる", "ja"),
+    "vid_zh_0009": (700, "韩国综艺反应", "zh-Hans"),
+    "vid_hg_0010": (6000, "Korea 한국 여행 브이로그 서울 맛집", ""),  # 제목 대부분 한글 → 제외
+    "vid_es_0011": (400, "Reacción a Corea del Sur", "es"),
+    "vid_pt_0012": (300, "Reagindo à Coreia do Sul", "pt"),
+}
+SEARCH = {
+    "en": ["vid_en_0001", "vid_en_0002", "vid_en_0003", "vid_en_0004", "vid_en_0005", "vid_ko_0006", "vid_hg_0010"],
+    "ja": ["vid_ja_0007", "vid_ja_0008", "vid_en_0001"],  # 중복은 한 번만
+    "zh-Hans": ["vid_zh_0009"], "es": ["vid_es_0011"], "pt": ["vid_pt_0012"], "de": [], "fr": [],
+}
 
 
 class FakeResponse:
-    def __init__(self, content=b"", data=None):
-        self.content, self._data = content, data
-
-    def raise_for_status(self):
-        pass
+    def __init__(self, data, status=200):
+        self._data, self.status_code, self.text = data, status, str(data)
 
     def json(self):
         return self._data
 
 
-class FakeSession:
-    def __init__(self, fail=()):
+class FakeYouTube:
+    def __init__(self, videos=None, quota=False):
+        self.videos = dict(VIDEOS if videos is None else videos)
+        self.quota = quota
         self.headers = {}
         self.calls = []
-        self.fail = fail
 
     def get(self, url, params=None, timeout=None):
-        self.calls.append(url)
-        if any(f in url for f in self.fail):
-            raise ConnectionError("blocked")
-        if "news.google.com" in url:
-            return FakeResponse(RSS.replace("{p}", str(abs(hash(url)) % 10000)).encode())
-        if "/comments/" in url:
-            return FakeResponse(data=COMMENTS)
-        return FakeResponse(data=reddit_listing(str(abs(hash(url)) % 10000)))
-
-    def post(self, url, auth=None, data=None, timeout=None):
-        self.calls.append(url)
-        assert url.endswith("/api/v1/access_token") and data == {"grant_type": "client_credentials"}
-        return FakeResponse(data={"access_token": "tok"})
+        path = url.rsplit("/", 1)[1]
+        self.calls.append((path, dict(params or {})))
+        assert params["key"] == "test-key"
+        if self.quota:
+            return FakeResponse({"error": {"code": 403, "message": "quota", "errors": [{"reason": "quotaExceeded"}]}}, 403)
+        if path == "search":
+            ids = [v for v in SEARCH.get(params["relevanceLanguage"], []) if v in self.videos]
+            return FakeResponse({"items": [{"id": {"videoId": v}} for v in ids]})
+        if path == "videos":
+            items = []
+            for vid in params["id"].split(","):
+                count, title, lang = self.videos[vid]
+                stats = {} if count is None else {"commentCount": str(count)}
+                items.append({"id": vid, "statistics": stats, "snippet": {
+                    "title": title, "description": f"Description of {title}", "channelTitle": "Channel " + vid,
+                    "publishedAt": "2026-11-24T03:00:00Z", "defaultAudioLanguage": lang,
+                    "thumbnails": {"high": {"url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"}}}})
+            return FakeResponse({"items": items})
+        if path == "commentThreads":
+            return FakeResponse({"items": [
+                {"snippet": {"topLevelComment": {"snippet": {"authorDisplayName": f"@user{i}",
+                                                             "textDisplay": f"comment {i} on {params['videoId']}",
+                                                             "likeCount": 100 - i}}}}
+                for i in range(3)]})
+        raise AssertionError(path)
 
 
 @pytest.fixture(autouse=True)
-def reddit_keys(app):
-    app.config.update(REDDIT_CLIENT_ID="id", REDDIT_CLIENT_SECRET="secret")
+def youtube_key(app):
+    app.config.update(YOUTUBE_API_KEY="test-key", PER_SITE_DAILY=10, MIN_COMMENTS=10)
 
 
-# ------------------------------------------------------------------ 수집
-def test_fetch_rss_strips_publisher_suffix():
-    items = fetch_rss(dict(id="t", url="https://news.google.com/rss", country="us", lang="en"), FakeSession(), 5)
-    assert [i.title for i in items][:2] == ["Samsung shares jump on chip demand", "Son Heung-min scores twice"]
-    assert items[0].source_name == "Example Wire"
-    assert items[0].summary == ""
-    assert items[0].published_at is not None
+# ------------------------------------------------------------------ YouTube 수집
+def test_search_candidates_filters_and_sorts(app):
+    errors = []
+    items = youtube.search_candidates(app.config, FakeYouTube(), errors)
+    assert errors == []
+    assert [i.external_id for i in items] == [
+        "vid_en_0001", "vid_en_0002", "vid_ja_0007", "vid_ja_0008", "vid_en_0003", "vid_zh_0009",
+        "vid_es_0011", "vid_pt_0012",
+    ]  # 댓글 9개·댓글 중지·한국어 영상 제외, 댓글 많은 순
+    first = items[0]
+    assert first.url == "https://www.youtube.com/watch?v=vid_en_0001" and first.num_comments == 5400
+    assert first.image_url.endswith("/hqdefault.jpg") and first.source_name == "Channel vid_en_0001"
+    assert first.published_at == datetime(2026, 11, 24, 3, 0)
 
 
-def test_fetch_reddit_requires_10_comments():
-    client = RedditClient(FakeSession())
-    items = fetch_reddit(dict(id="r", sub="korea", mode="top", category=None), client, 5,
-                         comments_per_item=50, min_comments=10)
-    assert [i.title for i in items] == ["Seoul subway is amazing"]  # 댓글 9개 글, NSFW 제외
-    assert items[0].num_comments == 42
-    assert [r["author"] for r in items[0].reactions] == ["alice", "carol"]
+def test_search_uses_last_24_hours_and_all_languages(app):
+    fake = FakeYouTube()
+    youtube.search_candidates(app.config, fake, [])
+    searches = [p for path, p in fake.calls if path == "search"]
+    assert {p["relevanceLanguage"] for p in searches} == {"en", "ja", "zh-Hans", "es", "pt", "de", "fr"}
+    since = datetime.fromisoformat(searches[0]["publishedAfter"].replace("Z", "+00:00"))
+    assert 23.9 < (datetime.now(timezone.utc) - since).total_seconds() / 3600 < 24.1
+
+
+def test_collect_keeps_top_n_per_site_with_comments(app):
+    app.config.update(PER_SITE_DAILY=3)
+    fake = FakeYouTube()
+    run = collector.run_collection(fake)
+    assert run.added == 3 and run.errors == ""
+    assert Post.query.count() == 0  # 사이트에는 자동 게시하지 않음
+    rows = CollectedItem.query.order_by(CollectedItem.num_comments.desc()).all()
+    assert [r.source_id for r in rows] == ["vid_en_0001", "vid_en_0002", "vid_ja_0007"]
+    assert rows[0].source_type == "youtube" and rows[0].country == "youtube"
+    assert [c["author"] for c in rows[0].comments] == ["@user0", "@user1", "@user2"]
+    # 댓글은 수집함에 넣는 영상만 가져온다 (할당량 절약)
+    assert sorted(p["videoId"] for path, p in fake.calls if path == "commentThreads") == [
+        "vid_en_0001", "vid_en_0002", "vid_ja_0007"]
+
+
+def test_rerun_replaces_untouched_but_keeps_worked_items(app):
+    app.config.update(PER_SITE_DAILY=3)
+    collector.run_collection(FakeYouTube())
+    worked = CollectedItem.query.filter_by(source_id="vid_ja_0007").one()
+    worked.translate_status = "done"  # 운영자가 번역한 글
+    db.session.commit()
+
+    videos = dict(VIDEOS)
+    videos["vid_pt_0012"] = (9999, "Reagindo à Coreia do Sul", "pt")  # 새로 급상승
+    videos["vid_en_0002"] = (3300, "Why K-pop dominates the charts", "en")
+    run = collector.run_collection(FakeYouTube(videos))
+    ids = {r.source_id for r in CollectedItem.query.all()}
+    # 1위 신규 영상 추가, 손대지 않은 하위 글(vid_en_0002)은 교체, 번역한 글은 유지
+    assert ids == {"vid_pt_0012", "vid_en_0001", "vid_ja_0007"}
+    assert run.added == 1 and run.skipped == 1
+
+
+def test_comment_counts_refresh_for_existing(app):
+    collector.run_collection(FakeYouTube())
+    videos = dict(VIDEOS)
+    videos["vid_en_0003"] = (4321, "Seoul subway tour", "en-US")
+    assert collector.run_collection(FakeYouTube(videos)).added == 0
+    assert CollectedItem.query.filter_by(source_id="vid_en_0003").one().num_comments == 4321
+
+
+def test_no_api_key_means_nothing_collected(app):
+    app.config.update(YOUTUBE_API_KEY="")
+    fake = FakeYouTube()
+    run = collector.run_collection(fake)
+    assert run.added == 0 and fake.calls == []
+    assert "YOUTUBE_API_KEY" in run.errors
+
+
+def test_quota_exceeded_is_reported_once(app):
+    fake = FakeYouTube(quota=True)
+    run = collector.run_collection(fake)
+    assert run.added == 0 and "할당량" in run.errors
+    assert len(fake.calls) == 1 and len(run.errors.splitlines()) == 1  # 첫 요청에서 멈춤
+
+
+def test_kst_midnight():
+    now = datetime(2026, 11, 24, 16, 30, tzinfo=timezone.utc)  # 한국 시간 11/25 01:30
+    assert collector.kst_midnight_utc(now) == datetime(2026, 11, 24, 15, 0)
+
+
+def test_mostly_korean():
+    assert mostly_korean("한국 예능 하이라이트 모음") and not mostly_korean("Foreigners try Korean food")
+    assert mostly_korean("Korea 한국 여행 브이로그 서울 맛집")
 
 
 @pytest.mark.parametrize("text,cat", [
@@ -115,62 +182,10 @@ def test_classify(text, cat):
     assert classify(text) == cat
 
 
-def test_collection_goes_to_inbox_not_site(app):
-    app.config.update(COLLECT_MAX_PER_RUN=100)
-    session = FakeSession()
-    run = collector.run_collection(session)
-    assert run.added == 8 and run.errors == ""  # Reddit 8개 소스 × 댓글 10개 이상 글 1개
-    assert Post.query.count() == 0  # 사이트에는 자동 게시하지 않음
-    items = CollectedItem.query.all()
-    assert all(i.source_type == "reddit" and i.num_comments >= 10 for i in items)
-    assert [c["author"] for c in items[0].comments] == ["alice", "carol"]
-    assert not any("news.google.com" in u for u in session.calls)  # 댓글 없는 뉴스는 가져오지도 않음
-    # 다시 실행해도 중복 저장 없음
-    assert collector.run_collection(FakeSession()).added == 0 and CollectedItem.query.count() == 8
-    assert CollectLog.query.count() == 2
-
-
-def test_min_comments_threshold_is_configurable(app):
-    app.config.update(MIN_COMMENTS=50, COLLECT_MAX_PER_RUN=100)
-    assert collector.run_collection(FakeSession()).added == 0  # 테스트 글은 댓글 42개
-
-
-def test_news_without_comments_can_be_included(app):
-    app.config.update(INCLUDE_NEWS_WITHOUT_COMMENTS=True, COLLECT_MAX_PER_RUN=100)
-    run = collector.run_collection(FakeSession())
-    assert run.errors == ""
-    gnews = CollectedItem.query.filter_by(source_type="gnews").all()
-    assert gnews and all(i.num_comments == 0 for i in gnews)
-    jp = CollectedItem.query.filter(CollectedItem.url.like("%/a1"), CollectedItem.country == "jp").first()
-    assert jp.category_hint == "economy" and jp.status == "new"
-
-
-def test_collection_cap_errors_and_mix(app):
-    app.config.update(INCLUDE_NEWS_WITHOUT_COMMENTS=True, COLLECT_MAX_PER_RUN=6)
-    run = collector.run_collection(FakeSession(fail=("reddit.com/r/kpop",)))
-    assert run.added == 6 and "rd-kpop" in run.errors
-    assert len({i.country for i in CollectedItem.query.all()}) >= 3
-
-
-def test_no_reddit_keys_means_nothing_to_collect(app):
-    app.config.update(REDDIT_CLIENT_ID="", REDDIT_CLIENT_SECRET="", COLLECT_MAX_PER_RUN=100)
-    session = FakeSession()
-    run = collector.run_collection(session)
-    assert run.added == 0 and session.calls == []
-    assert "Reddit API 키" in run.errors  # 관리자 페이지 수집 기록에 이유가 표시됨
-
-
-def test_reddit_uses_oauth_with_keys(app):
-    session = FakeSession()
-    collector.run_collection(session)
-    assert any(u.startswith("https://oauth.reddit.com/") for u in session.calls)
-    assert session.headers["Authorization"] == "bearer tok"
-
-
 def test_cli_collect(app, monkeypatch):
-    monkeypatch.setattr(collector, "_new_session", lambda cfg: FakeSession())
+    monkeypatch.setattr(collector, "_new_session", lambda cfg: FakeYouTube())
     result = app.test_cli_runner().invoke(args=["collect"])
-    assert "추가" in result.output and result.exit_code == 0
+    assert result.exit_code == 0 and "YouTube" in result.output
 
 
 # ------------------------------------------------------------------ 번역
@@ -256,6 +271,21 @@ def test_translate_summarizes_article_and_all_comments(app, monkeypatch, article
     assert "KOSPI index to a record high" in prompt and "[0] Great news" in prompt and "[1] Buy the dip" in prompt
     assert calls[0]["model"] == "claude-opus-5-5" and calls[0]["fallbacks"] == "default"
     assert "500자 이내" in calls[0]["system"]
+
+
+def test_translate_youtube_uses_description(app, monkeypatch, article_fetch):
+    parsed = tr.Translation(title_ko="외국인 길거리 음식 체험", summary_ko="요약", category="fun",
+                            comments_ko=[tr.CommentKo(index=0, text="맛있겠다")])
+    client, calls = fake_client(parsed)
+    monkeypatch.setattr(tr, "_get_client", lambda: client)
+    item = make_item(source_type="youtube", url="https://www.youtube.com/watch?v=vid_en_0001", country="youtube",
+                     snippet="We tried 10 street foods in Myeongdong.", image_url="https://i.ytimg.com/x.jpg",
+                     comments=[{"author": "@a", "body": "looks tasty", "score": 9}])
+    tr.start_translation(item)
+    item = db.session.get(CollectedItem, item.id)
+    assert item.translate_status == "done" and article_fetch == []  # 외부 페이지 요청 없음
+    assert "Myeongdong" in calls[0]["messages"][0]["content"]
+    assert "영상 제목과 설명" in item.translate_note
 
 
 def test_translate_reddit_self_post_without_article(app, monkeypatch, article_fetch):

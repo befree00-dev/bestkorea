@@ -30,7 +30,7 @@
 <article class="box article desk-item">
   <div class="crumbs">
     <a href="{{ url_for('desk.index') }}">수집함</a> · {{ country_label(item.country) }}
-    {%- if item.source_type != 'reddit' %} · 뉴스{% endif %} · {{ item.source_name }}
+    {%- if item.source_type == 'gnews' %} · 뉴스{% endif %} · {{ item.source_name }}
   </div>
 
   {{ toolbar('top') }}
@@ -50,13 +50,17 @@
       <span>번역 {{ item.translated_at|timeago }}</span>
     </div>
     {% if item.translate_note %}<div class="notice">{{ item.translate_note|nl2br }}</div>{% endif %}
-    {% if item.image_url %}<figure class="article-image"><img src="{{ item.image_url }}" alt="" referrerpolicy="no-referrer"></figure>{% endif %}
+    {% set yt = item.url|youtube_id %}
+    {% if yt %}<div class="video"><iframe src="https://www.youtube-nocookie.com/embed/{{ yt }}" title="YouTube 영상" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+    {% elif item.image_url %}<figure class="article-image"><img src="{{ item.image_url }}" alt="" referrerpolicy="no-referrer"></figure>{% endif %}
     <div class="article-body">{{ item.summary_ko|nl2br }}</div>
   {% else %}
     <h1>{{ item.title }}</h1>
-    {% if item.image_url %}<figure class="article-image"><img src="{{ item.image_url }}" alt="" referrerpolicy="no-referrer"></figure>{% endif %}
+    {% set yt = item.url|youtube_id %}
+    {% if yt %}<div class="video"><iframe src="https://www.youtube-nocookie.com/embed/{{ yt }}" title="YouTube 영상" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
+    {% elif item.image_url %}<figure class="article-image"><img src="{{ item.image_url }}" alt="" referrerpolicy="no-referrer"></figure>{% endif %}
     {% if item.snippet %}<div class="article-body">{{ item.snippet|nl2br }}</div>{% endif %}
-    <p class="muted">‘번역’을 누르면 원문 기사를 가져와 {{ cfg.SUMMARY_MAX_CHARS }}자 이내로 요약하고, 댓글 {{ item.comments|length }}개를 모두 번역합니다.</p>
+    <p class="muted">‘번역’을 누르면 원문(기사 본문 또는 영상 설명)을 가져와 {{ cfg.SUMMARY_MAX_CHARS }}자 이내로 요약하고, 댓글 {{ item.comments|length }}개를 모두 번역합니다.</p>
   {% endif %}
 
   <a class="source-card" href="{{ item.resolved_url or item.url }}" target="_blank" rel="nofollow noopener">

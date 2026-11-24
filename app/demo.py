@@ -73,20 +73,19 @@ def seed():
             post.comment_count = 1
             n += 1
 
-    # 수집함 (아직 게시되지 않은 수집 글)
+    # 수집함 (아직 게시되지 않은 수집 글) — YouTube 샘플
+    channels = ["Example Reacts", "サンプルチャンネル", "示例频道", "Canal Ejemplo", "Beispiel Kanal"]
     for i in range(8):
-        country = COUNTRY_CYCLE[i % len(COUNTRY_CYCLE)]
-        is_reddit = country == "reddit"
         item = CollectedItem(
-            source_type="reddit" if is_reddit else "gnews", source_id="demo",
-            url=f"https://example.com/sample/item/{i}",
-            title=f"[Sample] Foreign coverage of Korea #{i + 1}",
-            snippet="Sample snippet for layout testing." if not is_reddit else "Sample Reddit self post body.",
-            source_name=SOURCES[country], country=country, lang="en",
+            source_type="youtube", source_id=f"demo{i:07d}",
+            url=f"https://www.youtube.com/watch?v=demo{i:07d}",
+            title=f"[Sample] Foreigners react to Korea #{i + 1}",
+            snippet="Sample video description for layout testing.",
+            source_name=channels[i % len(channels)], country="youtube", lang="en",
             category_hint=NEWS_BOARDS[i % len(NEWS_BOARDS)],
-            num_comments=len(SAMPLE_COMMENTS) if is_reddit else 0,
-            comments=[dict(author=a, body=b, score=s) for a, b, _, s in SAMPLE_COMMENTS] if is_reddit else [],
-            collected_at=now - timedelta(hours=i),
+            num_comments=1200 - i * 130,
+            comments=[dict(author=a, body=b, score=sc) for a, b, _, sc in SAMPLE_COMMENTS],
+            collected_at=now - timedelta(minutes=i * 10),
         )
         if i == 0:  # 번역까지 끝난 예시
             item.translate_status = "done"

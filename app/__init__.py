@@ -12,6 +12,7 @@ from .constants import BOARDS, COMMUNITY_BOARDS, COUNTRIES, NEWS_BOARDS, board_n
 from .extensions import csrf, db, login_manager
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
+_YT_RE = re.compile(r"https?://(?:www\.|m\.)?(?:youtube\.com/watch\?(?:.*&)?v=|youtu\.be/)([A-Za-z0-9_-]{11})")
 
 
 def create_app(config_class=Config):
@@ -104,6 +105,11 @@ def _register_template_helpers(app):
         if diff < timedelta(days=7):
             return f"{diff.days}일 전"
         return dt.strftime("%Y.%m.%d")
+
+    @app.template_filter("youtube_id")
+    def youtube_id(url):
+        m = _YT_RE.match(url or "")
+        return m.group(1) if m else None
 
     @app.template_filter("nl2br")
     def nl2br(text):

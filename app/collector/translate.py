@@ -160,7 +160,7 @@ def resolve_article_url(item):
                 return result["decoded_url"]
             raise TranslationError(f"Google News 원문 주소를 찾지 못했습니다: {result.get('message')}")
         return item.url
-    return item.article_url
+    return item.article_url  # Reddit 링크 글 등. YouTube 는 None (영상 설명으로 요약)
 
 
 def fetch_html(url, user_agent):
@@ -205,8 +205,8 @@ def gather_source_text(item, cfg):
     """(본문, 이미지, 실제 기사 주소, 안내 메모)"""
     notes = []
     text, image, resolved = "", item.image_url, None
-    if item.source_type == "reddit" and item.snippet:
-        text = item.snippet  # 본문 글(selftext)
+    if item.source_type != "gnews" and item.snippet:
+        text = item.snippet  # 영상 설명·게시물 본문
     try:
         resolved = resolve_article_url(item)
         if resolved:
@@ -223,6 +223,8 @@ def gather_source_text(item, cfg):
     if not text:
         text = item.snippet or ""
         notes.append("제목과 수집된 발췌문만으로 요약했습니다. 원문 링크로 내용을 꼭 확인하세요.")
+    if item.source_type == "youtube":
+        notes.append("영상 제목과 설명을 바탕으로 요약했습니다. 영상 내용과 다를 수 있으니 확인하세요.")
     limit = cfg["ARTICLE_MAX_CHARS"]
     if len(text) > limit:
         text = text[:limit]

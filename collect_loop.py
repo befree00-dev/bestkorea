@@ -4,7 +4,7 @@ import os
 import time
 
 from app import create_app
-from app.collector import run_collection, today_news_count
+from app.collector import SITES, run_collection, today_counts
 
 INTERVAL = int(os.environ.get("COLLECT_EVERY_SECONDS", 10800))
 
@@ -15,7 +15,8 @@ while True:
     with app.app_context():
         try:
             run = run_collection()
-            log.info("추가 %s건, 중복 %s건, 최근 24시간 %s건", run.added, run.skipped, today_news_count())
+            counts = ", ".join(f"{SITES[k]['name']} {v}" for k, v in today_counts().items())
+            log.info("추가 %s건, 교체 %s건 / 오늘 수집함: %s", run.added, run.skipped, counts)
             if run.errors:
                 log.warning("수집 오류 %s건 (관리자 페이지에서 확인)", len(run.errors.splitlines()))
         except Exception:

@@ -28,14 +28,14 @@ def staff_required(f):
 @bp.route("/")
 @staff_required
 def index():
-    from .collector import reddit_enabled
+    from .collector import SITES, site_status, today_counts
 
     status = request.args.get("status", "new")
     query = CollectedItem.query
     if status in STATUSES:
         query = query.filter_by(status=status)
     source = request.args.get("source")
-    if source in ("gnews", "reddit"):
+    if source:
         query = query.filter_by(source_type=source)
     country = request.args.get("country")
     if country in COUNTRIES:
@@ -46,13 +46,17 @@ def index():
     if q:
         like = f"%{q}%"
         query = query.filter(or_(CollectedItem.title.ilike(like), CollectedItem.title_ko.ilike(like)))
-    pagination = query.order_by(CollectedItem.collected_at.desc(), CollectedItem.id.desc()).paginate(
+    if request.args.get("sort") == "comments":
+        query = query.order_by(CollectedItem.num_comments.desc(), CollectedItem.id.desc())
+    else:
+        query = query.order_by(CollectedItem.collected_at.desc(), CollectedItem.num_comments.desc())
+    pagination = query.paginate(
         page=request.args.get("page", 1, type=int), per_page=30, error_out=False
     )
     counts = {s: CollectedItem.query.filter_by(status=s).count() for s in STATUSES}
     return render_template(
         "desk/list.html", pagination=pagination, status=status, counts=counts, STATUSES=STATUSES,
-        reddit_on=reddit_enabled(current_app.config),
+        sites=site_status(current_app.config), SITES=SITES, today=today_counts(),
     )
 
 

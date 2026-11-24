@@ -9,11 +9,12 @@
     <div><strong>{{ stats.users }}</strong><span>회원 (운영자 {{ role_counts.operator }} · 기자 {{ role_counts.reporter }})</span></div>
     <div><strong>{{ stats.posts }}</strong><span>게시글</span></div>
     <div><strong>{{ stats.comments }}</strong><span>댓글</span></div>
-    <div><strong class="{{ 'ok' if today >= cfg.DAILY_TARGET else 'warn' }}">{{ today }}</strong><span>최근 24시간 수집 (목표 {{ cfg.DAILY_TARGET }}+)</span></div>
+    {% set today_total = today.values()|sum %}
+    <div><strong class="{{ 'ok' if today_total else 'warn' }}">{{ today_total }}</strong><span>오늘 수집 (사이트별 최대 {{ cfg.PER_SITE_DAILY }})</span></div>
   </div>
   <p class="muted">자동 수집: {{ cfg.COLLECT_INTERVAL_MINUTES ~ '분 간격 (웹 내장)' if cfg.ENABLE_SCHEDULER else '수집기 컨테이너/cron 에서 실행' }} ·
-     수집 기준: 댓글 {{ cfg.MIN_COMMENTS }}개 이상{{ ' + 댓글 없는 뉴스 포함' if cfg.INCLUDE_NEWS_WITHOUT_COMMENTS }} ·
-     Reddit: {{ '켜짐 (API 키)' if reddit_on else '꺼짐 (API 키 없음 — 설정 전까지 새 글이 수집되지 않음)' }} ·
+     수집 기준: 최근 24시간, 댓글 {{ cfg.MIN_COMMENTS }}개 이상, 사이트별 하루 {{ cfg.PER_SITE_DAILY }}개 ·
+     {% for code, name, on, missing in sites %}{{ name }}: {{ '켜짐 (오늘 ' ~ today[code] ~ '개)' if on else '꺼짐 — ' ~ missing }} · {% endfor %}
      번역 모델: {{ cfg.ANTHROPIC_MODEL }} ·
      AdSense: {{ cfg.ADSENSE_CLIENT or '미설정' }}</p>
   <div class="actions" style="justify-content:flex-start">
@@ -90,7 +91,7 @@
 <div class="box">
   <h2>수집 기록</h2>
   <table class="table">
-    <thead><tr><th>시작</th><th>추가</th><th>중복</th><th>오류</th></tr></thead>
+    <thead><tr><th>시작</th><th>추가</th><th>교체</th><th>오류</th></tr></thead>
     <tbody>
     {% for l in logs %}
       <tr><td>{{ l.started_at.strftime('%m-%d %H:%M') }}</td><td>{{ l.added }}</td><td>{{ l.skipped }}</td>

@@ -25,7 +25,7 @@ def admin_required(f):
 @bp.route("/")
 @admin_required
 def dashboard():
-    from .collector import reddit_enabled, today_collected_count
+    from .collector import site_status, today_counts
 
     role_filter = request.args.get("role")
     users = User.query
@@ -37,8 +37,8 @@ def dashboard():
     return render_template(
         "admin/dashboard.html",
         logs=CollectLog.query.order_by(CollectLog.id.desc()).limit(10).all(),
-        today=today_collected_count(),
-        reddit_on=reddit_enabled(current_app.config),
+        today=today_counts(),
+        sites=site_status(current_app.config),
         stats=dict(users=User.query.count(), posts=Post.query.count(), comments=Comment.query.count()),
         role_counts={r: User.query.filter_by(role=r).count() for r in ROLES},
         users=users.order_by(User.id.desc()).limit(100).all(),
@@ -90,7 +90,7 @@ def collect_now():
     from .collector import run_collection
 
     run = run_collection()
-    flash(f"수집 완료: 추가 {run.added}건, 중복 {run.skipped}건" + (" (오류 있음)" if run.errors else ""), "info")
+    flash(f"수집 완료: 추가 {run.added}건, 교체 {run.skipped}건" + (" (오류 있음)" if run.errors else ""), "info")
     return redirect(request.referrer or url_for("admin.dashboard"))
 
 

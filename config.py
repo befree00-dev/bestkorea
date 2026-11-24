@@ -57,12 +57,8 @@ class Config:
     # --- 자동 수집 (수집함에만 쌓이고, 사이트 게시는 운영자가 직접) ---
     ENABLE_SCHEDULER = _bool("ENABLE_SCHEDULER", False)
     COLLECT_INTERVAL_MINUTES = int(os.environ.get("COLLECT_INTERVAL_MINUTES", 180))
-    COLLECT_MAX_PER_SOURCE = int(os.environ.get("COLLECT_MAX_PER_SOURCE", 4))
-    COLLECT_MAX_PER_RUN = int(os.environ.get("COLLECT_MAX_PER_RUN", 40))
-    DAILY_TARGET = int(os.environ.get("DAILY_TARGET", 10))
     MIN_COMMENTS = int(os.environ.get("MIN_COMMENTS", 10))  # 댓글이 이만큼 이상인 글만 수집
-    # true 면 댓글 정보가 없는 뉴스 RSS(Google News)도 수집 (기본: 제외)
-    INCLUDE_NEWS_WITHOUT_COMMENTS = _bool("INCLUDE_NEWS_WITHOUT_COMMENTS", False)
+    PER_SITE_DAILY = int(os.environ.get("PER_SITE_DAILY", 10))  # 사이트별 하루(한국 시간) 수집 개수
     COMMENTS_PER_ITEM = int(os.environ.get("COMMENTS_PER_ITEM", 50))  # 글당 저장·번역할 댓글 수 (인기순)
     HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "web:bestkorea-collector:1.0")
     # 원문 기사 본문을 가져올 때 쓰는 브라우저 User-Agent (일부 언론사는 봇 UA를 차단)
@@ -71,8 +67,8 @@ class Config:
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/130.0 Safari/537.36",
     )
-    REDDIT_CLIENT_ID = os.environ.get("REDDIT_CLIENT_ID", "")
-    REDDIT_CLIENT_SECRET = os.environ.get("REDDIT_CLIENT_SECRET", "")
+    # YouTube Data API v3 키 (Google Cloud 콘솔에서 무료 발급, 하루 10,000 할당량)
+    YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
 
     # --- 수집함 '번역' 버튼: Claude API (ANTHROPIC_API_KEY 필요) ---
     ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5")
