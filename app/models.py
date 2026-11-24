@@ -41,11 +41,11 @@ class Post(db.Model):
 
     # 해외 뉴스 메타데이터
     original_title = db.Column(db.String(500))
-    source_url = db.Column(db.String(1000), unique=True)
+    source_url = db.Column(db.String(2000), unique=True)
     source_name = db.Column(db.String(200))
     country = db.Column(db.String(10), index=True)
     lang = db.Column(db.String(10))
-    image_url = db.Column(db.String(1000))
+    image_url = db.Column(db.Text)
     published_at = db.Column(db.DateTime)
 
     views = db.Column(db.Integer, default=0, nullable=False)

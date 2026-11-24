@@ -45,7 +45,24 @@ FLASK_APP=wsgi .venv/bin/flask run
 
 수집 소스는 `app/collector/sources.py` 한 파일에서 추가/삭제합니다.
 
-## 운영 배포 예시
+## Render 배포 (권장)
+
+저장소에 `render.yaml`이 있어 웹 서버, 3시간마다 수집(cron), PostgreSQL이 한 번에 만들어집니다 (싱가포르 리전).
+
+1. https://dashboard.render.com 가입 → GitHub 계정 연결 (bestkorea 저장소 접근 허용)
+2. **New → Blueprint** → `befree00-dev/bestkorea` 선택
+3. 입력 칸이 나오면:
+   - `ADMIN_EMAIL`: 관리자로 쓸 본인 이메일 (**필수** — 이 이메일로 가입해야 관리자가 됨)
+   - 나머지(`SITE_URL`, `ADSENSE_*`, `ANTHROPIC_API_KEY`, `REDDIT_*`)는 비워 두고 나중에 입력 가능
+4. **Apply** → 빌드가 끝나면 `https://bestkorea.onrender.com` (또는 비슷한 주소) 접속
+5. `ADMIN_EMAIL`로 회원가입 → 상단 **관리** → **지금 수집 실행**으로 첫 수집
+
+예상 비용: 웹 Starter $7 + Postgres basic-256mb 약 $6 + cron(실행 시간만큼, 월 $1 내외) / 월.
+`main` 브랜치에 push하면 자동으로 다시 배포됩니다.
+
+도메인 연결: 웹 서비스 → Settings → Custom Domains에 도메인 추가 → 안내된 DNS 레코드를 도메인 업체에 등록 → 환경 변수 `SITE_URL=https://도메인` 설정.
+
+## 직접 서버 운영 예시
 
 ```bash
 .venv/bin/gunicorn -w 3 -b 127.0.0.1:8000 wsgi:app

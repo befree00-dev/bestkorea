@@ -1,0 +1,88 @@
+# Render Blueprint: Render 대시보드 → New → Blueprint → 이 GitHub 저장소 선택
+# 웹 서버 + 3시간마다 수집(cron) + PostgreSQL 을 한 번에 만든다.
+# 지역은 한국과 가장 가까운 싱가포르.
+
+envVarGroups:
+  - name: bestkorea-shared
+    envVars:
+      # 선택: Claude 번역 (켜려면 TRANSLATE_ENABLED=true + ANTHROPIC_API_KEY 입력)
+      - key: TRANSLATE_ENABLED
+        value: "false"
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-opus-5-5
+      # 권장: Reddit 앱 키 (클라우드 서버 IP는 비로그인 요청이 차단되는 경우가 많음)
+      - key: REDDIT_CLIENT_ID
+        sync: false
+      - key: REDDIT_CLIENT_SECRET
+        sync: false
+      - key: DAILY_TARGET
+        value: "10"
+      - key: COLLECT_MAX_PER_RUN
+        value: "40"
+
+services:
+  - type: web
+    name: bestkorea
+    runtime: python
+    region: singapore
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    # --preload: 테이블 생성을 워커 시작 전에 한 번만 실행
+    startCommand: gunicorn --preload --workers 2 --timeout 60 --bind 0.0.0.0:$PORT wsgi:app
+    healthCheckPath: /robots.txt
+    envVars:
+      - fromGroup: bestkorea-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bestkorea-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: BEHIND_PROXY
+        value: "true"
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: ENABLE_SCHEDULER
+        value: "false"
+      # 도메인 연결 후 https://도메인 으로 입력 (비워 두면 onrender.com 주소 사용)
+      - key: SITE_URL
+        sync: false
+      # AdSense 승인 후 입력
+      - key: ADSENSE_CLIENT
+        sync: false
+      - key: ADSENSE_SLOT_TOP
+        sync: false
+      - key: ADSENSE_SLOT_SIDEBAR
+        sync: false
+      - key: ADSENSE_SLOT_IN_ARTICLE
+        sync: false
+      - key: ADSENSE_SLOT_IN_FEED
+        sync: false
+      - key: SHOW_AD_PLACEHOLDERS
+        value: "false"
+
+  - type: cron
+    name: bestkorea-collect
+    runtime: python
+    region: singapore
+    plan: starter
+    schedule: "0 */3 * * *"   # UTC 기준 3시간마다
+    buildCommand: pip install -r requirements.txt
+    startCommand: flask --app wsgi collect
+    envVars:
+      - fromGroup: bestkorea-shared
+      - key: DATABASE_URL
+        fromDatabase:
+          name: bestkorea-db
+          property: connectionString
+
+databases:
+  - name: bestkorea-db
+    databaseName: bestkorea
+    user: bestkorea
+    region: singapore
+    plan: basic-256mb

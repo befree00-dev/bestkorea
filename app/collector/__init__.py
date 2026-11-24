@@ -73,7 +73,7 @@ def _interleave(lists):
 
 def save_item(item, cfg):
     """새 항목이면 Post로 저장하고 반환, 중복이면 None."""
-    if Post.query.filter_by(source_url=item.url).first():
+    if len(item.url) > 2000 or Post.query.filter_by(source_url=item.url).first():
         return None
     title, summary = item.title, item.summary
     category = item.category
@@ -100,9 +100,9 @@ def save_item(item, cfg):
         original_title=item.title[:500] if title != item.title else None,
         body=body or "",
         source_url=item.url,
-        source_name=item.source_name[:200],
+        source_name=(item.source_name or "")[:200],
         country=item.country,
-        lang=item.lang,
+        lang=(item.lang or "")[:10],
         image_url=item.image_url,
         published_at=item.published_at,
     )

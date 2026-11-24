@@ -1,6 +1,6 @@
 from urllib.parse import urlparse
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 
 from .extensions import db
@@ -24,8 +24,10 @@ def signup():
     if form.validate_on_submit():
         user = User(username=form.username.data.strip(), email=form.email.data.strip().lower())
         user.set_password(form.password.data)
-        # 첫 번째 가입자는 관리자
-        if User.query.count() == 0:
+        admin_email = current_app.config["ADMIN_EMAIL"]
+        if admin_email:
+            user.is_admin = user.email == admin_email
+        elif User.query.count() == 0:  # ADMIN_EMAIL 미설정 시 첫 번째 가입자가 관리자
             user.is_admin = True
         db.session.add(user)
         db.session.commit()

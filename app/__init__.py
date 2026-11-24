@@ -18,6 +18,10 @@ def create_app(config_class=Config):
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_class)
     os.makedirs(app.instance_path, exist_ok=True)
+    if app.config.get("BEHIND_PROXY"):
+        from werkzeug.middleware.proxy_fix import ProxyFix
+
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     logging.basicConfig(level=logging.INFO)
 
     db.init_app(app)

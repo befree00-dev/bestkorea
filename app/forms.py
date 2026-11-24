@@ -38,7 +38,7 @@ class PostForm(FlaskForm):
     board = SelectField("게시판", choices=[(k, v[0]) for k, v in BOARDS.items()])
     title = StringField("제목", validators=[DataRequired(), Length(2, 200)])
     body = TextAreaField("내용", validators=[DataRequired(), Length(2, 20000)])
-    source_url = URLField("원문 링크 (해외 뉴스 제보 시)", validators=[Optional(), URL(), Length(max=1000)])
+    source_url = URLField("원문 링크 (해외 뉴스 제보 시)", validators=[Optional(), URL(), Length(max=2000)])
     country = SelectField(
         "국가/출처", choices=[("", "선택 안 함")] + [(k, f"{v[1]} {v[0]}") for k, v in COUNTRIES.items()],
         validators=[Optional()],

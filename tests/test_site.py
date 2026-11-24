@@ -116,3 +116,38 @@ def test_admin_dashboard_requires_admin(client, user):
     user.is_admin = True
     db.session.commit()
     assert client.get("/admin/").status_code == 200
+
+
+def test_admin_email_controls_admin(app, client):
+    app.config.update(ADMIN_EMAIL="boss@example.com")
+    data = dict(password="password123", password2="password123", agree="y")
+    client.post("/signup", data=dict(data, username="first", email="first@example.com"))
+    client.post("/logout")
+    client.post("/signup", data=dict(data, username="boss", email="Boss@Example.com"))
+    assert not User.query.filter_by(username="first").one().is_admin  # 첫 가입자라도 관리자 아님
+    assert User.query.filter_by(username="boss").one().is_admin
+
+
+def test_database_url_normalized(monkeypatch):
+    import config
+
+    for raw in ("postgres://u:p@h:5432/db", "postgresql://u:p@h:5432/db"):
+        monkeypatch.setenv("DATABASE_URL", raw)
+        assert config._database_url() == "postgresql+psycopg://u:p@h:5432/db"
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///x.db")
+    assert config._database_url() == "sqlite:///x.db"
+
+
+def test_proxy_fix_https(app):
+    from flask import request
+
+    from app import create_app
+    from config import TestConfig
+
+    class ProxyConfig(TestConfig):
+        BEHIND_PROXY = True
+
+    proxied = create_app(ProxyConfig)
+    proxied.add_url_rule("/_scheme", "scheme", lambda: request.scheme)
+    resp = proxied.test_client().get("/_scheme", headers={"X-Forwarded-Proto": "https"})
+    assert resp.get_data(as_text=True) == "https"
