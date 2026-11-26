@@ -30,6 +30,7 @@ COUNTRIES = OrderedDict(
         ("latam", ("남미", "🌎")),
         ("au", ("호주", "🇦🇺")),
         ("youtube", ("YouTube", "▶️")),
+        ("x", ("X(트위터)", "𝕏")),
         ("reddit", ("Reddit", "👽")),
         ("etc", ("기타", "🌐")),
     ]

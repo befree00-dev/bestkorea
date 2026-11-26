@@ -178,3 +178,10 @@ class CollectLog(db.Model):
     added = db.Column(db.Integer, default=0)
     skipped = db.Column(db.Integer, default=0)
     errors = db.Column(db.Text, default="")
+
+
+class SiteState(db.Model):
+    """사이트별 마지막 수집 시각 (X 처럼 검색 횟수를 아껴야 하는 사이트의 수집 간격 관리)."""
+
+    site = db.Column(db.String(20), primary_key=True)
+    last_run_at = db.Column(db.DateTime)

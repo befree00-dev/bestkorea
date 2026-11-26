@@ -69,6 +69,11 @@ class Config:
     )
     # YouTube Data API v3 키 (Google Cloud 콘솔에서 무료 발급, 하루 10,000 할당량)
     YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
+    # X(트위터) API v2 Bearer 토큰 (developer.x.com, 유료 요금제 필요). 읽은 게시물 수만큼 사용량 차감
+    X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
+    X_INTERVAL_HOURS = int(os.environ.get("X_INTERVAL_HOURS", 6))  # X 검색 최소 간격
+    X_SEARCH_MAX_RESULTS = int(os.environ.get("X_SEARCH_MAX_RESULTS", 50))  # 검색 1회에 읽을 게시물 (10~100)
+    X_REPLIES_PER_ITEM = int(os.environ.get("X_REPLIES_PER_ITEM", 20))  # 게시물당 읽을 답글 (10~100)
 
     # --- 수집함 '번역' 버튼: Claude API (ANTHROPIC_API_KEY 필요) ---
     ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5")

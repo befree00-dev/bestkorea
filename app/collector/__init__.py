@@ -15,8 +15,8 @@ import requests
 from flask import current_app
 
 from ..extensions import db
-from ..models import CollectedItem, CollectLog, utcnow
-from . import youtube
+from ..models import CollectedItem, CollectLog, SiteState, utcnow
+from . import x, youtube
 
 log = logging.getLogger(__name__)
 
@@ -30,6 +30,17 @@ SITES = {
         missing="YOUTUBE_API_KEY 가 설정되지 않았습니다",
         search=youtube.search_candidates,
         comments=youtube.fetch_comments,
+        interval_hours=lambda cfg: 0,
+    ),
+    "x": dict(
+        name="X(트위터)",
+        enabled=lambda cfg: bool(cfg.get("X_BEARER_TOKEN")),
+        missing="X_BEARER_TOKEN 이 설정되지 않았습니다",
+        search=x.search_candidates,
+        comments=x.fetch_comments,
+        # 유료 API 사용량을 아끼기 위해 X 는 이 간격보다 자주 검색하지 않는다
+        interval_hours=lambda cfg: cfg.get("X_INTERVAL_HOURS", 6),
+        optional=True,  # 토큰이 없어도 오류로 기록하지 않음 (화면에는 '꺼짐' 표시)
     ),
 }
 
@@ -133,8 +144,16 @@ def run_collection(session=None):
     errors = []
     for code, site in SITES.items():
         if not site["enabled"](cfg):
-            errors.append(f"{site['name']}: {site['missing']} (수집 안 함)")
+            if not site.get("optional"):
+                errors.append(f"{site['name']}: {site['missing']} (수집 안 함)")
             continue
+        state = db.session.get(SiteState, code) or SiteState(site=code)
+        interval = site["interval_hours"](cfg)
+        if interval and state.last_run_at and utcnow() - state.last_run_at < timedelta(hours=interval):
+            continue  # 아직 수집 간격이 지나지 않음
+        state.last_run_at = utcnow()
+        db.session.add(state)
+        db.session.commit()
         try:
             a, r = collect_site(code, cfg, session, errors)
             added, replaced = added + a, replaced + r

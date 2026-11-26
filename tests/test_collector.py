@@ -365,3 +365,94 @@ def test_trim_keeps_sentence_boundary():
     text = "첫 문장입니다. " * 80
     out = tr._trim(text, 500)
     assert len(out) <= 500 and out.endswith("다.")
+
+
+# ------------------------------------------------------------------ X(트위터) 수집
+from app.collector import x as xsite  # noqa: E402
+from app.models import SiteState  # noqa: E402
+
+TWEETS = [  # (id, 답글 수, 언어, 본문)
+    ("1001", 340, "en", "Seoul is the cleanest city I've ever visited"),
+    ("1002", 120, "ja", "韓国のコンビニが便利すぎる"),
+    ("1003", 9, "en", "Only nine replies about Korea"),
+    ("1004", 900, "ko", "한국어 트윗은 제외"),
+    ("1005", 55, "es", "Corea del Sur gana el partido"),
+]
+
+
+class FakeX:
+    def __init__(self, status=200):
+        self.calls, self.headers, self.status = [], {}, status
+
+    def get(self, url, params=None, headers=None, timeout=None):
+        assert headers["Authorization"] == "Bearer x-token"
+        self.calls.append(dict(params))
+        if self.status != 200:
+            return FakeResponse({"title": "Too Many Requests", "detail": "Usage cap exceeded"}, self.status)
+        q = params["query"]
+        if q.startswith("conversation_id:"):
+            cid = q.split()[0].split(":")[1]
+            return FakeResponse({
+                "data": [
+                    {"id": f"{cid}r1", "text": "@origin @friend Totally agree", "author_id": "u9",
+                     "public_metrics": {"like_count": 3}},
+                    {"id": f"{cid}r2", "text": "@origin Best trip ever", "author_id": "u8",
+                     "public_metrics": {"like_count": 40}},
+                ],
+                "includes": {"users": [{"id": "u9", "username": "fan9"}, {"id": "u8", "username": "fan8"}]},
+            })
+        return FakeResponse({
+            "data": [{"id": i, "text": text, "lang": lang, "author_id": "u1", "created_at": "2026-11-26T01:00:00Z",
+                      "public_metrics": {"reply_count": n, "like_count": 0},
+                      "attachments": {"media_keys": ["m1"]} if i == "1001" else {}}
+                     for i, n, lang, text in TWEETS],
+            "includes": {"users": [{"id": "u1", "username": "traveler", "name": "Trip Lover"}],
+                         "media": [{"media_key": "m1", "type": "photo", "url": "https://pbs.twimg.com/m1.jpg"}]},
+        })
+
+
+@pytest.fixture
+def x_on(app):
+    app.config.update(YOUTUBE_API_KEY="", X_BEARER_TOKEN="x-token", X_INTERVAL_HOURS=6,
+                      X_SEARCH_MAX_RESULTS=50, X_REPLIES_PER_ITEM=20)
+
+
+def test_x_search_filters_and_sorts(app, x_on):
+    errors = []
+    fake = FakeX()
+    items = xsite.search_candidates(app.config, fake, errors)
+    assert errors == []
+    assert [i.external_id for i in items] == ["1001", "1002", "1005"]  # 답글 9개·한국어 제외, 답글 많은 순
+    first = items[0]
+    assert first.url == "https://x.com/traveler/status/1001" and first.num_comments == 340
+    assert first.source_name == "@traveler (Trip Lover)" and first.image_url == "https://pbs.twimg.com/m1.jpg"
+    params = fake.calls[0]
+    assert params["max_results"] == 50 and "-is:retweet" in params["query"] and "-lang:ko" in params["query"]
+
+
+def test_x_collect_with_replies_and_interval(app, x_on):
+    fake = FakeX()
+    run = collector.run_collection(fake)
+    assert run.added == 3
+    assert all(line.startswith("YouTube") for line in run.errors.splitlines())  # X 쪽 오류 없음
+    row = CollectedItem.query.filter_by(source_id="1001").one()
+    assert row.source_type == "x" and row.country == "x"
+    # 답글: 앞의 @멘션 제거, 좋아요 많은 순
+    assert [(c["author"], c["body"]) for c in row.comments] == [("@fan8", "Best trip ever"), ("@fan9", "Totally agree")]
+    assert fake.calls[1]["max_results"] == 20
+    # X_INTERVAL_HOURS 안에 다시 돌리면 X 는 요청하지 않음 (사용량 절약)
+    fake2 = FakeX()
+    collector.run_collection(fake2)
+    assert fake2.calls == []
+    assert db.session.get(SiteState, "x").last_run_at is not None
+
+
+def test_x_usage_cap_is_reported(app, x_on):
+    run = collector.run_collection(FakeX(status=429))
+    assert run.added == 0 and "사용량 한도" in run.errors
+
+
+def test_x_off_without_token_is_not_an_error(app):
+    app.config.update(X_BEARER_TOKEN="")
+    run = collector.run_collection(FakeYouTube())
+    assert "X" not in run.errors
