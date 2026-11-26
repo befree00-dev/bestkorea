@@ -105,7 +105,7 @@ def visibility(item_id):
 @staff_required
 def import_page():
     from .collector import SITE_NAMES, save_item
-    from .collector.browser_import import ImportError_, detect, parse
+    from .collector.browser_import import ImportError_, detect, parse, read_note
 
     if request.method == "POST":
         cfg = current_app.config
@@ -119,8 +119,8 @@ def import_page():
             return redirect(url_for("desk.import_page"))
         row, created = save_item(item, article_url)
         if created:
-            flash(f"{SITE_NAMES[site]} 글을 수집함에 추가했습니다 (댓글 {len(item.reactions)}개). 번역을 눌러 보세요.",
-                  "success")
+            note = read_note(site, payload, item) or f"댓글 {len(item.reactions)}개"
+            flash(f"{SITE_NAMES[site]} 글을 수집함에 추가했습니다 ({note}). 번역을 눌러 보세요.", "success")
         else:
             flash("이미 수집함에 있는 글입니다.", "info")
         return redirect(url_for("desk.item", item_id=row.id))

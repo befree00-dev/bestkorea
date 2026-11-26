@@ -390,3 +390,12 @@ def test_translation_sets_region_only_when_unknown(app, monkeypatch, article_fet
     assert db.session.get(CollectedItem, unknown.id).country == "sea"
     assert db.session.get(CollectedItem, known.id).country == "jp"
     assert db.session.get(CollectedItem, unknown.id).category_ko == "it"
+
+
+def test_import_reports_read_count_and_stop_reason(app, client):
+    _staff_client(client)
+    payload = json.loads(x_payload())
+    payload["debug"] = {"stop": "section", "clicked": 2, "read": 2}
+    r = client.post("/desk/import", data={"site": "x", "payload": json.dumps(payload)}, follow_redirects=True)
+    html = r.get_data(as_text=True)
+    assert "전체 340개 중 2개 저장" in html and "다른 섹션이 시작됨" in html and "답글 더 보기&#39; 2번" in html

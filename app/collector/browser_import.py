@@ -216,3 +216,28 @@ def parse_x(data, min_comments, max_comments):
         published_at=_parse_time(data.get("published")), image_url=_safe_image(data.get("image"), "x"),
         num_comments=num_comments, reactions=comments,
     )
+
+
+STOP_REASONS = {
+    "limit": "충분히 읽음",
+    "idle": "더 불러올 댓글이 없음",
+    "section": "댓글 목록이 끝나고 다른 섹션이 시작됨",
+    "timeout": "45초 시간 초과",
+}
+
+
+def read_note(site, text, item):
+    """가져오기 결과 안내: 읽은 댓글 수 / 전체 댓글 수와 멈춘 이유 (YouTube·X)."""
+    if site not in ("youtube", "x"):
+        return ""
+    try:
+        debug = json.loads(text).get("debug") or {}
+    except (ValueError, AttributeError):
+        debug = {}
+    reason = STOP_REASONS.get(debug.get("stop"), "")
+    note = f"전체 {item.num_comments:,}개 중 {len(item.reactions)}개 저장"
+    if reason:
+        note += f", 읽기를 멈춘 이유: {reason}"
+    if debug.get("clicked"):
+        note += f", '답글 더 보기' {debug['clicked']}번 누름"
+    return note
