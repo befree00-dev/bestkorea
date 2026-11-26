@@ -1,4 +1,4 @@
-"""수집함: 관리자·운영자 전용. 수집된 해외 뉴스/게시물을 보고, 번역하고, 게시글로 작성한다."""
+"""수집함: 관리자·운영자 전용. 수집된 해외 뉴스/게시물을 보고, 번역하고, 게시판에 올린다."""
 from functools import wraps
 
 from flask import Blueprint, abort, current_app, flash, jsonify, redirect, render_template, request, url_for

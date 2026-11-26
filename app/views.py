@@ -155,6 +155,9 @@ def _save_news_fields(post, form):
 def write():
     form = _prepare_form(PostForm())
     item = _collected_item_for(request.values.get("from_item"))
+    if item and item.status == "published" and item.post:
+        flash("이미 게시된 글입니다.", "info")
+        return redirect(url_for("main.post_detail", board=item.post.board, post_id=item.post.id))
     if request.method == "GET":
         if item:
             _prefill_from_item(form, item)

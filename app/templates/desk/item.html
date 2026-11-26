@@ -10,13 +10,15 @@
       {% if running %}번역 중…{% elif item.translate_status == 'done' %}다시 번역{% else %}번역{% endif %}
     </button>
   </form>
-  {% if item.translate_status == 'done' and item.status != 'published' %}
-    <a class="btn" href="{{ url_for('main.write', from_item=item.id) }}">게시글로 작성</a>
-  {% endif %}
   {% if item.status == 'published' and item.post %}
     <a class="btn" href="{{ url_for('main.post_detail', board=item.post.board, post_id=item.post.id) }}">게시된 글 보기</a>
+  {% elif item.translate_status == 'done' %}
+    <a class="btn btn-post" href="{{ url_for('main.write', from_item=item.id) }}">게시판에 올리기</a>
+  {% else %}
+    <a class="btn" href="{{ url_for('main.write', from_item=item.id) }}"
+       title="번역하지 않은 원문으로 글쓰기 화면을 엽니다">게시판에 올리기 (번역 전)</a>
   {% endif %}
-  {% if item.status != 'published' %}
+  {% if not (item.status == 'published' and item.post) %}
   <form action="{{ url_for('desk.visibility', item_id=item.id) }}" method="post" class="inline">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn">{{ '수집함으로 되돌리기' if item.status == 'hidden' else '숨기기' }}</button>

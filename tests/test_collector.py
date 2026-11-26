@@ -187,7 +187,7 @@ def test_desk_translate_button_flow(app, client, monkeypatch, article_fetch):
     assert html.count('action="/desk/%d/translate"' % item.id) == 2  # 상단·하단 번역 버튼
     client.post(f"/desk/{item.id}/translate")
     html = client.get(f"/desk/{item.id}").get_data(as_text=True)
-    assert "삼성 주가 급등" in html and "번역된 본문" in html and "좋은 소식" in html and "게시글로 작성" in html
+    assert "삼성 주가 급등" in html and "번역된 본문" in html and "좋은 소식" in html and "게시판에 올리기" in html
     assert client.get(f"/desk/{item.id}/status.json").get_json() == {"translate_status": "done"}
 
 

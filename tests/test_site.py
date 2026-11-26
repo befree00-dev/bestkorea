@@ -274,3 +274,32 @@ def test_proxy_fix_https(app):
     proxied.add_url_rule("/_scheme", "scheme", lambda: request.scheme)
     resp = proxied.test_client().get("/_scheme", headers={"X-Forwarded-Proto": "https"})
     assert resp.get_data(as_text=True) == "https"
+
+
+def test_post_button_visible_before_translation(client):
+    make_user("o", "operator")
+    item = CollectedItem(source_type="youtube", url="https://www.youtube.com/watch?v=abcdefghijk", title="Korea vlog",
+                         snippet="description", country="youtube", category_hint="fun",
+                         comments=[{"author": "@a", "body": "nice", "score": 1}], num_comments=12)
+    db.session.add(item)
+    db.session.commit()
+    login(client, "o@example.com")
+    html = client.get(f"/desk/{item.id}").get_data(as_text=True)
+    assert html.count(f'href="/write?from_item={item.id}"') == 2  # 상단·하단 모두
+    assert "게시판에 올리기 (번역 전)" in html
+    page = client.get(f"/write?from_item={item.id}").get_data(as_text=True)
+    assert "아직 번역하지 않은 글" in page and "Korea vlog" in page
+
+
+def test_published_item_links_to_post(client):
+    make_user("o", "operator")
+    item = _translated_item()
+    login(client, "o@example.com")
+    html = client.get(f"/desk/{item.id}").get_data(as_text=True)
+    assert html.count("게시판에 올리기</a>") == 2
+    client.post("/write", data=dict(board="politics", title="서울 지하철", body="번역 본문", country="", from_item=str(item.id)))
+    html = client.get(f"/desk/{item.id}").get_data(as_text=True)
+    assert "게시된 글 보기" in html and "게시판에 올리기" not in html
+    # 이미 게시된 글로 다시 글쓰기를 열면 게시글로 이동 (중복 게시 방지)
+    r = client.get(f"/write?from_item={item.id}")
+    assert r.status_code == 302 and "/b/politics/" in r.headers["Location"]
