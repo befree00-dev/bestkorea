@@ -56,6 +56,7 @@ FLASK_APP=wsgi .venv/bin/flask run
 |---|---|---|
 | YouTube | 지원 | `YOUTUBE_API_KEY` — Google Cloud 콘솔 → 새 프로젝트 → "YouTube Data API v3" 사용 설정 → 사용자 인증 정보 → API 키. 무료 할당량 하루 10,000 (3시간마다 수집 시 약 6,000 사용) |
 | X(트위터) | 지원 (선택) | `X_BEARER_TOKEN` — developer.x.com 개발자 포털 → 프로젝트·앱 생성 → Bearer Token. **게시물 검색(최근 검색)이 되는 유료 요금제 필요.** 읽은 게시물 수만큼 월 사용량이 차감되므로 기본값은 6시간마다 검색 1회(50개) + 새 글당 답글 20개로 아껴 씀 (`X_INTERVAL_HOURS`, `X_SEARCH_MAX_RESULTS`, `X_REPLIES_PER_ITEM`). 하루 약 400~500건, 월 1만~1만5천 건 정도 |
+| Reddit | 운영자가 직접 가져오기 | 서버 자동 수집은 Reddit 이 차단하므로, 수집함 → **Reddit 가져오기**의 버튼을 즐겨찾기 막대에 등록해 두고 Reddit 글에서 누르면 수집함에 추가 (댓글 10개 이상, 인기 댓글 최대 50개). 자동 전달이 안 되면 붙여넣기로 추가 |
 | TikTok, Instagram, Yahoo Japan, Baidu | 미지원 | 일반 개발자용 공식 수집 경로가 없거나 제한적 (아래 '다른 사이트' 참고) |
 
 키가 없으면 해당 사이트는 수집하지 않고, 수집함과 관리자 화면에 '꺼짐'으로 표시됩니다.
@@ -145,7 +146,8 @@ app/
   desk.py            수집함 (관리자·운영자): 목록, 상세, 번역 버튼, 숨기기
   admin.py           관리자: 등급 관리, 기자 지원 승인, 수집 기록
   auth.py            회원가입·로그인
-  collector/         sources.py(검색어), youtube.py(YouTube API), x.py(X API), fetchers.py(공통), classify.py(분류),
+  collector/         sources.py(검색어), youtube.py(YouTube API), x.py(X API), reddit_import.py(Reddit 가져오기),
+                     fetchers.py(공통), classify.py(분류),
                      translate.py(원문 추출 + Claude 요약·번역)
   scheduler.py cli.py
   templates/ static/

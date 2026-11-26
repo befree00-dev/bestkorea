@@ -97,3 +97,32 @@ def visibility(item_id):
     db.session.commit()
     flash("숨겼습니다." if row.status == "hidden" else "수집함으로 되돌렸습니다.", "info")
     return redirect(request.referrer or url_for("desk.index"))
+
+
+# ------------------------------------------------------------------ Reddit 가져오기 (운영자 브라우저 → 수집함)
+@bp.route("/import/reddit", methods=["GET", "POST"])
+@staff_required
+def import_reddit():
+    from .collector import _save
+    from .collector.reddit_import import RedditImportError, parse_reddit_json
+
+    if request.method == "POST":
+        cfg = current_app.config
+        try:
+            item, external = parse_reddit_json(request.form.get("payload", ""), cfg["MIN_COMMENTS"],
+                                               cfg["COMMENTS_PER_ITEM"])
+        except RedditImportError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("desk.import_reddit"))
+        existing = CollectedItem.query.filter_by(url=item.url).first()
+        if existing:
+            flash("이미 수집함에 있는 글입니다.", "info")
+            return redirect(url_for("desk.item", item_id=existing.id))
+        row = _save(item)
+        row.article_url = external[:2000] if external else None
+        db.session.commit()
+        flash(f"수집함에 추가했습니다 (댓글 {len(item.reactions)}개). 번역을 눌러 보세요.", "success")
+        return redirect(url_for("desk.item", item_id=row.id))
+
+    origin = request.host_url.rstrip("/")
+    return render_template("desk/import_reddit.html", origin=origin)

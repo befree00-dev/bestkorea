@@ -456,3 +456,89 @@ def test_x_off_without_token_is_not_an_error(app):
     app.config.update(X_BEARER_TOKEN="")
     run = collector.run_collection(FakeYouTube())
     assert "X" not in run.errors
+
+
+# ------------------------------------------------------------------ Reddit 가져오기 (북마클릿)
+import json as _json  # noqa: E402
+
+
+def reddit_json(num_comments=42, over_18=False, permalink="/r/korea/comments/abc123/seoul_subway/", is_self=True,
+                url=None):
+    post = dict(id="abc123", title="Seoul subway is amazing", subreddit="korea", permalink=permalink,
+                num_comments=num_comments, over_18=over_18, is_self=is_self, selftext="Just visited &amp; loved it",
+                created_utc=1764100000, url=url or "https://www.reddit.com" + permalink,
+                preview={"images": [{"source": {"url": "https://preview.redd.it/x.jpg?a=1&amp;b=2"}}]})
+    comments = [
+        {"kind": "t1", "data": {"author": "AutoModerator", "body": "rules", "score": 1, "stickied": True}},
+        {"kind": "t1", "data": {"author": "bob", "body": "Clean and fast", "score": 50}},
+        {"kind": "t1", "data": {"author": "alice", "body": "Best transit in the world", "score": 120}},
+        {"kind": "t1", "data": {"author": "x", "body": "[removed]", "score": 999}},
+        {"kind": "more", "data": {}},
+    ]
+    return _json.dumps([{"data": {"children": [{"kind": "t3", "data": post}]}},
+                        {"data": {"children": comments}}])
+
+
+def test_parse_reddit_json():
+    from app.collector.reddit_import import parse_reddit_json
+
+    item, external = parse_reddit_json(reddit_json(), 10, 50)
+    assert item.url == "https://www.reddit.com/r/korea/comments/abc123/seoul_subway/"
+    assert item.source_name == "r/korea" and item.num_comments == 42 and external is None
+    assert [c["author"] for c in item.reactions] == ["alice", "bob"]  # 점수순, 자동모더레이터·삭제 제외
+    assert item.summary == "Just visited & loved it"
+    assert item.image_url == "https://preview.redd.it/x.jpg?a=1&b=2"
+
+
+def test_parse_reddit_json_link_post():
+    from app.collector.reddit_import import parse_reddit_json
+
+    _, external = parse_reddit_json(reddit_json(is_self=False, url="https://news.example/korea"), 10, 50)
+    assert external == "https://news.example/korea"
+
+
+@pytest.mark.parametrize("payload,message", [
+    (reddit_json(num_comments=5), "수집 기준"),
+    (reddit_json(over_18=True), "NSFW"),
+    (reddit_json(permalink="https://evil.example/"), "주소"),
+    ('{"not": "reddit"}', "형식"),
+    ("", "비어"),
+])
+def test_parse_reddit_json_rejects(payload, message):
+    from app.collector.reddit_import import RedditImportError, parse_reddit_json
+
+    with pytest.raises(RedditImportError, match=message):
+        parse_reddit_json(payload, 10, 50)
+
+
+def _staff_client(app, client, role="operator"):
+    from app.models import User
+
+    u = User(username=role, email=f"{role}@example.com", role=role)
+    u.set_password("password123")
+    db.session.add(u)
+    db.session.commit()
+    client.post("/login", data={"email": f"{role}@example.com", "password": "password123"})
+    return client
+
+
+def test_import_reddit_route(app, client):
+    _staff_client(app, client)
+    html = client.get("/desk/import/reddit").get_data(as_text=True)
+    assert 'href="javascript:' in html and "BestKorea로 가져오기" in html
+    r = client.post("/desk/import/reddit", data={"payload": reddit_json()})
+    item = CollectedItem.query.one()
+    assert r.headers["Location"].endswith(f"/desk/{item.id}")
+    assert item.source_type == "reddit" and item.status == "new" and len(item.comments) == 2
+    # 같은 글을 다시 가져오면 기존 글로 이동
+    r = client.post("/desk/import/reddit", data={"payload": reddit_json()})
+    assert CollectedItem.query.count() == 1 and r.headers["Location"].endswith(f"/desk/{item.id}")
+    # 기준 미달은 거절
+    client.post("/desk/import/reddit", data={"payload": reddit_json(num_comments=3, permalink="/r/korea/comments/zz9/x/")})
+    assert CollectedItem.query.count() == 1
+
+
+def test_import_reddit_staff_only(app, client):
+    _staff_client(app, client, role="reporter")
+    assert client.get("/desk/import/reddit").status_code == 403
+    assert client.post("/desk/import/reddit", data={"payload": reddit_json()}).status_code == 403

@@ -12,12 +12,15 @@
         <strong>{{ name }}</strong> {{ today[code] }}/{{ cfg.PER_SITE_DAILY }}{% if not on %} <span class="likes">(꺼짐: {{ missing }})</span>{% endif %}{{ ' · ' if not loop.last }}
       {% endfor %}</p>
   </div>
+  <div class="desk-toolbar">
+  <a class="btn" href="{{ url_for('desk.import_reddit') }}">Reddit 가져오기</a>
   {% if current_user.is_admin %}
   <form action="{{ url_for('admin.collect_now') }}" method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <button class="btn">지금 수집</button>
   </form>
   {% endif %}
+  </div>
 </div>
 
 <div class="chips">
@@ -29,6 +32,7 @@
   {% for code, site in SITES.items() %}
   <a class="chip {{ 'active' if request.args.get('source') == code }}" href="{{ url_with(source=code, page=None) }}">{{ site.name }}</a>
   {% endfor %}
+  <a class="chip {{ 'active' if request.args.get('source') == 'reddit' }}" href="{{ url_with(source='reddit', page=None) }}">Reddit (직접 가져옴)</a>
   <a class="chip {{ 'active' if request.args.get('sort') == 'comments' }}" href="{{ url_with(sort=None if request.args.get('sort') == 'comments' else 'comments', page=None) }}">댓글 많은 순</a>
   <a class="chip {{ 'active' if request.args.get('translated') == '1' }}" href="{{ url_with(translated=None if request.args.get('translated') == '1' else '1', page=None) }}">번역 완료만</a>
 </div>
