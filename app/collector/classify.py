@@ -1,4 +1,4 @@
-"""다국어 키워드 기반 카테고리 분류기 (Claude 번역을 끈 경우 사용). 키워드가 없으면 기타(fun)."""
+"""다국어 키워드 기반 카테고리 추천 (번역 전 기본값). 키워드가 없으면 기타(fun). 번역하면 Claude 가 다시 고른다."""
 import re
 
 KEYWORDS = {
@@ -21,10 +21,22 @@ KEYWORDS = {
         "ゲーム", "eスポーツ", "游戏", "遊戲", "电竞", "電競", "videojuego", "jogo", "spiel",
     ],
     "economy": [
-        "economy", "economic", "samsung", "hyundai", "lg ", "sk hynix", "kia", "kospi", "won ", "export",
-        "tariff", "trade", "semiconductor", "chip", "battery", "stock", "market", "gdp", "inflation",
-        "bank of korea", "investment", "経済", "株", "輸出", "半導体", "関税", "经济", "經濟", "出口", "半导体",
-        "芯片", "关税", "economía", "economia", "exportación", "wirtschaft", "zoll", "économie", "bourse",
+        "economy", "economic", "hyundai", "kia", "kospi", "won ", "export",
+        "tariff", "trade", "battery", "stock", "market", "gdp", "inflation",
+        "bank of korea", "investment", "経済", "株", "輸出", "関税", "经济", "經濟", "出口",
+        "关税", "economía", "economia", "exportación", "wirtschaft", "zoll", "économie", "bourse",
+    ],
+    "it": [
+        "samsung galaxy", "galaxy s", "iphone", "smartphone", "semiconductor", "chip", "sk hynix", "hbm", "memory",
+        " ai ", "artificial intelligence", "naver", "kakao", "coupang", "line app", "5g", "robot", "startup",
+        "tech", "software", "app ", "internet", "lg display", "oled", "半導体", "スマホ", "アプリ", "半导体",
+        "芯片", "手机", "智能", "semiconductores", "tecnología", "tecnologia", "technologie", "halbleiter",
+    ],
+    "society": [
+        "crime", "police", "court", "protest", "strike", "accident", "fire", "school", "education", "university",
+        "suicide", "birth rate", "fertility", "population", "aging", "housing", "rent", "gender", "feminism",
+        "military service", "conscription", "work hours", "culture", "society", "social", "事件", "事故", "社会",
+        "少子化", "教育", "警察", "裁判", "社会", "事故", "人口", "sociedad", "sociedade", "gesellschaft", "société",
     ],
     "fun": [
         "meme", "funny", "lol", "hilarious", "joke", "weird", "cute", "til ", "mildly", "おもしろ", "面白",
@@ -32,7 +44,7 @@ KEYWORDS = {
     ],
     "politics": [
         "president", "election", "parliament", "assembly", "minister", "north korea", "pyongyang", "kim jong",
-        "military", "missile", "diplomat", "summit", "protest", "court", "police", "law", "policy",
+        "military", "missile", "diplomat", "summit", "impeach", "policy", "government",
         "大統領", "北朝鮮", "選挙", "国会", "総理", "外交", "总统", "朝鲜", "選舉", "选举", "外交", "presidente",
         "elección", "eleição", "norcorea", "coreia do norte", "corea del norte", "präsident", "nordkorea",
         "président", "corée du nord",

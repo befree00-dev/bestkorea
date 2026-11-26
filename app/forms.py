@@ -40,7 +40,7 @@ class PostForm(FlaskForm):
     body = TextAreaField("내용", validators=[DataRequired(), Length(2, 100000)])  # 본문 전체 번역도 들어갈 수 있게
     source_url = URLField("원문 링크", validators=[Optional(), URL(), Length(max=2000)])
     country = SelectField(
-        "국가/출처", choices=[("", "선택 안 함")] + [(k, f"{v[1]} {v[0]}") for k, v in COUNTRIES.items()],
+        "출처 지역", choices=[("", "선택 안 함")] + [(k, f"{v[1]} {v[0]}") for k, v in COUNTRIES.items()],
         validators=[Optional()],
     )
     image_url = URLField("대표 이미지 주소", validators=[Optional(), URL(), Length(max=2000)])

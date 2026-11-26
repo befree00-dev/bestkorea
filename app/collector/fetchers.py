@@ -14,7 +14,7 @@ class Item:
     external_id: str  # 사이트 안에서의 글 ID (예: YouTube videoId)
     title: str
     url: str
-    country: str
+    country: str | None  # 출처 지역 코드 (모르면 None — 번역 시 Claude 가 추정하거나 운영자가 선택)
     lang: str
     summary: str = ""  # 영상 설명·본문 발췌
     source_name: str = ""  # 채널명·매체명

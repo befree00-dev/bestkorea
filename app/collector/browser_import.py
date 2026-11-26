@@ -14,6 +14,7 @@ import re
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
+from ..constants import region_for_lang
 from .classify import classify
 from .fetchers import COMMENT_LIMIT, Item, clean_text
 
@@ -167,7 +168,7 @@ def parse_reddit(text, min_comments, max_comments):
     selftext = clean_text(post.get("selftext"), 20000, keep_lines=True)
     return Item(
         site="reddit", external_id=str(post.get("id", ""))[:50], title=title,
-        url="https://www.reddit.com" + permalink, country="reddit", lang="en", summary=selftext,
+        url="https://www.reddit.com" + permalink, country=None, lang="en", summary=selftext,
         source_name=f"r/{post.get('subreddit', '')}", category=classify(f"{title} {selftext[:500]}"),
         published_at=_parse_time(post.get("created_utc")), image_url=_reddit_image(post),
         num_comments=num_comments, reactions=comments,
@@ -189,7 +190,7 @@ def parse_youtube(data, min_comments, max_comments):
     text = clean_text(str(data.get("text") or ""), 20000, keep_lines=True)
     return Item(
         site="youtube", external_id=vid, title=title, url=f"https://www.youtube.com/watch?v={vid}",
-        country="youtube", lang="", summary=text, source_name=clean_text(str(data.get("author") or ""), 200),
+        country=None, lang="", summary=text, source_name=clean_text(str(data.get("author") or ""), 200),
         category=classify(f"{title} {text[:500]}"), published_at=_parse_time(data.get("published")),
         image_url=f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg", num_comments=num_comments, reactions=comments,
     )
@@ -210,7 +211,7 @@ def parse_x(data, min_comments, max_comments):
     name = clean_text(str(data.get("name") or ""), 100)
     return Item(
         site="x", external_id=tid, title=clean_text(text, 200), url=f"https://x.com/{handle}/status/{tid}",
-        country="x", lang=clean_text(str(data.get("lang") or ""), 10), summary=text,
+        country=region_for_lang(data.get("lang")), lang=clean_text(str(data.get("lang") or ""), 10), summary=text,
         source_name=f"@{handle}" + (f" ({name})" if name else ""), category=classify(text),
         published_at=_parse_time(data.get("published")), image_url=_safe_image(data.get("image"), "x"),
         num_comments=num_comments, reactions=comments,

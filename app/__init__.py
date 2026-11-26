@@ -8,7 +8,9 @@ from markupsafe import Markup, escape
 
 from config import Config
 
-from .constants import BOARDS, COMMUNITY_BOARDS, COUNTRIES, NEWS_BOARDS, board_name, can_write_board, country_label
+from .constants import (
+    BOARDS, COMMUNITY_BOARDS, COUNTRIES, NEWS_BOARDS, board_name, can_write_board, country_flag, country_label,
+)
 from .extensions import csrf, db, login_manager
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
@@ -54,11 +56,16 @@ def create_app(config_class=Config):
 
     with app.app_context():
         db.create_all()
+        from .upgrade import upgrade_data
+
+        upgrade_data()
 
     return app
 
 
 def _register_template_helpers(app):
+    from .collector import SITE_NAMES
+
     @app.context_processor
     def inject_globals():
         return dict(
@@ -68,6 +75,8 @@ def _register_template_helpers(app):
             COUNTRIES=COUNTRIES,
             board_name=board_name,
             country_label=country_label,
+            country_flag=country_flag,
+            SITE_NAMES=SITE_NAMES,
             cfg=app.config,
             url_with=url_with,
             can_write_board=can_write_board,

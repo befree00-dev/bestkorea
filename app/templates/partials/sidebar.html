@@ -1,8 +1,8 @@
 {% from "partials/ad.html" import ad with context %}
 <section class="box">
-  <h3>국가별 해외 반응</h3>
+  <h3>지역별 해외 반응</h3>
   <ul class="country-list">
-    {% for code, (name, flag) in COUNTRIES.items() if code != 'etc' %}
+    {% for code, (name, flag) in COUNTRIES.items() %}
       <li><a href="{{ url_for('main.news', country=code) }}">{{ flag }} {{ name }}</a></li>
     {% endfor %}
   </ul>

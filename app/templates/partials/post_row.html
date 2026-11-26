@@ -4,7 +4,7 @@
     <div class="post-text">
       <div class="post-title">
         {% if show_board %}<span class="cat cat-{{ p.board }}">{{ board_name(p.board) }}</span>{% endif %}
-        {% if p.country %}<span class="flag" title="{{ country_label(p.country) }}">{{ COUNTRIES.get(p.country, COUNTRIES['etc'])[1] }}</span>{% endif %}
+        {% if p.country in COUNTRIES %}<span class="flag" title="{{ country_label(p.country) }}">{{ country_flag(p.country) }}</span>{% endif %}
         {{ p.title }}
         {% if p.comment_count or p.reactions %}<span class="cnt">[{{ p.comment_count + (p.reactions|length) }}]</span>{% endif %}
       </div>

@@ -11,7 +11,9 @@ from app.models import CollectedItem
 
 
 @pytest.mark.parametrize("text,cat", [
-    ("Samsung shares jump on chip demand", "economy"),
+    ("Samsung shares jump on strong exports", "economy"),
+    ("SK Hynix HBM chip demand soars", "it"),
+    ("Korean birth rate hits record low", "society"),
     ("Son Heung-min scores twice for Tottenham", "sports"),
     ("BLACKPINK announce world tour", "entertainment"),
     ("T1 Faker wins Worlds again", "game"),
@@ -59,7 +61,7 @@ def fake_client(parsed, stop_reason="end_turn"):
 
 def make_item(**kw):
     defaults = dict(source_type="gnews", url="https://news.google.com/rss/articles/CBMiXYZ", title="Samsung shares jump",
-                    source_name="Example Wire", country="us", lang="en", category_hint="economy",
+                    source_name="Example Wire", country="na", lang="en", category_hint="economy",
                     comments=[{"author": "a", "body": "Great news", "score": 5},
                               {"author": "b", "body": "Buy the dip", "score": 3}])
     defaults.update(kw)
@@ -87,7 +89,7 @@ def article_fetch(monkeypatch):
 
 def test_translate_full_article_and_all_comments(app, monkeypatch, article_fetch):
     parsed = tr.Translation(
-        title_ko="삼성 주가, 반도체 수요에 급등", body_ko=FULL_BODY_KO, category="economy",
+        title_ko="삼성 주가, 반도체 수요에 급등", body_ko=FULL_BODY_KO, category="economy", region="unknown",
         comments_ko=[tr.CommentKo(index=1, text="저점 매수 각"), tr.CommentKo(index=0, text="좋은 소식")],
     )
     client, calls = fake_client(parsed)
@@ -112,7 +114,7 @@ def test_translate_full_article_and_all_comments(app, monkeypatch, article_fetch
 
 
 def test_translate_youtube_uses_description(app, monkeypatch, article_fetch):
-    parsed = tr.Translation(title_ko="외국인 길거리 음식 체험", body_ko="번역문", category="fun",
+    parsed = tr.Translation(title_ko="외국인 길거리 음식 체험", body_ko="번역문", category="fun", region="unknown",
                             comments_ko=[tr.CommentKo(index=0, text="맛있겠다")])
     client, calls = fake_client(parsed)
     monkeypatch.setattr(tr, "_get_client", lambda: client)
@@ -127,11 +129,11 @@ def test_translate_youtube_uses_description(app, monkeypatch, article_fetch):
 
 
 def test_translate_reddit_self_post_without_article(app, monkeypatch, article_fetch):
-    parsed = tr.Translation(title_ko="서울 지하철", body_ko="번역문", category="fun",
+    parsed = tr.Translation(title_ko="서울 지하철", body_ko="번역문", category="fun", region="unknown",
                             comments_ko=[tr.CommentKo(index=0, text="동의")])
     client, calls = fake_client(parsed)
     monkeypatch.setattr(tr, "_get_client", lambda: client)
-    item = make_item(source_type="reddit", url="https://www.reddit.com/r/korea/comments/x/y/", country="reddit",
+    item = make_item(source_type="reddit", url="https://www.reddit.com/r/korea/comments/x/y/", country=None,
                      snippet="Just visited Seoul.", image_url="https://i.redd.it/p.jpg",
                      comments=[{"author": "a", "body": "agree", "score": 1}])
     tr.start_translation(item)
@@ -150,7 +152,7 @@ def test_translate_falls_back_when_article_unavailable(app, monkeypatch):
     monkeypatch.setattr(googlenewsdecoder, "gnewsdecoder",
                         lambda url, timeout=None: {"success": True, "decoded_url": "https://paywall.example/a"})
     monkeypatch.setattr(tr, "fetch_html", broken)
-    parsed = tr.Translation(title_ko="t", body_ko="s", category="politics", comments_ko=[])
+    parsed = tr.Translation(title_ko="t", body_ko="s", category="politics", region="unknown", comments_ko=[])
     client, _ = fake_client(parsed)
     monkeypatch.setattr(tr, "_get_client", lambda: client)
     item = make_item(comments=[], snippet="short snippet")
@@ -176,7 +178,7 @@ def test_desk_translate_button_flow(app, client, monkeypatch, article_fetch):
     op.set_password("password123")
     db.session.add(op)
     db.session.commit()
-    parsed = tr.Translation(title_ko="삼성 주가 급등", body_ko="번역된 본문", category="economy",
+    parsed = tr.Translation(title_ko="삼성 주가 급등", body_ko="번역된 본문", category="economy", region="unknown",
                             comments_ko=[tr.CommentKo(index=0, text="좋은 소식"), tr.CommentKo(index=1, text="매수")])
     fake, _ = fake_client(parsed)
     monkeypatch.setattr(tr, "_get_client", lambda: fake)
@@ -259,7 +261,7 @@ def test_parse_reddit_link_post():
 
 def test_parse_youtube():
     item, _ = parse("youtube", youtube_payload(), 10, 50)
-    assert item.url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ" and item.country == "youtube"
+    assert item.url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ" and item.country is None  # 지역은 번역·운영자가 결정
     assert item.image_url == "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
     assert item.num_comments == 1234 and [c["author"] for c in item.reactions] == ["@b", "@a"]
     assert item.summary == "We tried 10 foods.\n\nMyeongdong!" and item.source_name == "Example Reacts"
@@ -269,6 +271,8 @@ def test_parse_x_builds_url_and_filters_image():
     item, _ = parse("x", x_payload(), 10, 50)
     assert item.url == "https://x.com/traveler/status/1861000000000000001"
     assert item.source_name == "@traveler (Trip Lover)" and item.lang == "en" and item.num_comments == 340
+    assert item.country is None  # 영어는 여러 지역에서 쓰므로 추정하지 않음
+    assert parse("x", x_payload(lang="ja"), 10, 50)[0].country == "jp"
     assert item.image_url == "https://pbs.twimg.com/media/a.jpg"
     assert item.reactions[0]["body"] == "Best trip"  # 답글 앞 @멘션 제거
     item, _ = parse("x", x_payload(image="https://evil.example/a.jpg"), 10, 50)
@@ -373,3 +377,16 @@ def test_bookmarklet_script_is_valid_js(app, client, tmp_path):
     js.write_text(unquote(href.replace("&amp;", "&")))
     out = subprocess.run([node, "--check", str(js)], capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
+
+
+def test_translation_sets_region_only_when_unknown(app, monkeypatch, article_fetch):
+    parsed = tr.Translation(title_ko="t", body_ko="b", category="it", region="sea", comments_ko=[])
+    client, _ = fake_client(parsed)
+    monkeypatch.setattr(tr, "_get_client", lambda: client)
+    unknown = make_item(comments=[], url="https://example.com/a1", source_type="youtube", country=None, snippet="x")
+    known = make_item(comments=[], url="https://example.com/a2", source_type="youtube", country="jp", snippet="x")
+    tr.start_translation(unknown)
+    tr.start_translation(known)
+    assert db.session.get(CollectedItem, unknown.id).country == "sea"
+    assert db.session.get(CollectedItem, known.id).country == "jp"
+    assert db.session.get(CollectedItem, unknown.id).category_ko == "it"

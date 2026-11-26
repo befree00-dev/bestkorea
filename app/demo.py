@@ -9,10 +9,10 @@ from .constants import COMMUNITY_BOARDS, NEWS_BOARDS, ROLE_MEMBER, ROLE_OPERATOR
 from .extensions import db
 from .models import CollectedItem, Comment, Post, Reaction, User, utcnow
 
-COUNTRY_CYCLE = ["us", "jp", "cn", "eu", "latam", "au", "reddit"]
+COUNTRY_CYCLE = ["na", "jp", "cn", "sea", "eu", "latam", "au", "af"]
 SOURCES = {
-    "us": "Example Times (US)", "jp": "サンプル新聞", "cn": "示例日报", "eu": "Beispiel Zeitung",
-    "latam": "Diario Ejemplo", "au": "Sample Herald AU", "reddit": "r/korea",
+    "na": "Example Times (US)", "jp": "サンプル新聞", "cn": "示例日报", "sea": "Contoh Harian", "eu": "Beispiel Zeitung",
+    "latam": "Diario Ejemplo", "au": "Sample Herald AU", "af": "Sample Daily Nairobi",
 }
 SAMPLE_COMMENTS = [
     ("user_a", "I visited Seoul last year and this totally matches my experience.", "작년에 서울 갔었는데 내 경험이랑 완전 똑같네.", 512),
@@ -81,7 +81,7 @@ def seed():
             url=f"https://www.youtube.com/watch?v=demo{i:07d}",
             title=f"[Sample] Foreigners react to Korea #{i + 1}",
             snippet="Sample video description for layout testing.",
-            source_name=channels[i % len(channels)], country="youtube", lang="en",
+            source_name=channels[i % len(channels)], country=COUNTRY_CYCLE[i % len(COUNTRY_CYCLE)], lang="en",
             category_hint=NEWS_BOARDS[i % len(NEWS_BOARDS)],
             num_comments=1200 - i * 130,
             comments=[dict(author=a, body=b, score=sc) for a, b, _, sc in SAMPLE_COMMENTS],

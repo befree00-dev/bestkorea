@@ -89,10 +89,10 @@ def test_reporter_can_write_and_comment(client):
     make_user("r", "reporter")
     login(client, "r@example.com")
     client.post("/write", data=dict(board="economy", title="경제 기사", body="본문",
-                                    source_url="https://news.example/x", country="us",
+                                    source_url="https://news.example/x", country="na",
                                     image_url="https://img.example/x.jpg"))
     p = Post.query.filter_by(board="economy").one()
-    assert (p.source_url, p.country, p.image_url) == ("https://news.example/x", "us", "https://img.example/x.jpg")
+    assert (p.source_url, p.country, p.image_url) == ("https://news.example/x", "na", "https://img.example/x.jpg")
     client.post(f"/post/{p.id}/comment", data={"body": "좋은 기사"})
     html = client.get(f"/b/economy/{p.id}").get_data(as_text=True)
     assert '<span class="role role-reporter">기자</span>' in html
@@ -177,7 +177,7 @@ def test_cli_make_admin_transfers(app):
 def _translated_item():
     item = CollectedItem(
         source_type="reddit", url="https://www.reddit.com/r/korea/comments/abc/x/", title="Seoul subway is amazing",
-        source_name="r/korea", country="reddit", lang="en", category_hint="fun",
+        source_name="r/korea", country="na", lang="en", category_hint="fun",
         comments=[{"author": "alice", "body": "Totally agree!", "score": 120},
                   {"author": "bob", "body": "Best transit", "score": 80}],
         num_comments=42, translate_status="done", title_ko="서울 지하철은 놀랍다",
@@ -197,7 +197,7 @@ def test_publish_from_desk_item(client):
     assert "서울 지하철은 놀랍다" in html and "요약입니다." in html and "현지 반응" in html
     assert "<summary>원문</summary>" not in client.get(f"/desk/{item.id}").get_data(as_text=True)
     r = client.post("/write", data=dict(board="politics", title="서울 지하철은 놀랍다", body="요약입니다.",
-                                        source_url=item.url, country="reddit", image_url=item.image_url,
+                                        source_url=item.url, country="na", image_url=item.image_url,
                                         from_item=str(item.id)))
     post = Post.query.one()
     assert r.status_code == 302 and post.original_title == "Seoul subway is amazing"
@@ -247,7 +247,7 @@ def test_adsense_tags(app, client):
 
 def test_sitemap_and_country_filter(client, user):
     make_post(board="politics", title="JP글", country="jp", user_id=user.id)
-    make_post(board="politics", title="US글", country="us", user_id=user.id)
+    make_post(board="politics", title="US글", country="na", user_id=user.id)
     assert "/b/politics/" in client.get("/sitemap.xml").get_data(as_text=True)
     html = client.get("/news?country=jp").get_data(as_text=True)
     assert "JP글" in html and "US글" not in html
@@ -303,3 +303,26 @@ def test_published_item_links_to_post(client):
     # 이미 게시된 글로 다시 글쓰기를 열면 게시글로 이동 (중복 게시 방지)
     r = client.get(f"/write?from_item={item.id}")
     assert r.status_code == 302 and "/b/politics/" in r.headers["Location"]
+
+
+def test_new_categories_and_regions_listed(client):
+    html = client.get("/").get_data(as_text=True)
+    for name in ["정치", "경제", "연예", "스포츠", "게임", "IT", "사회", "기타"]:
+        assert f">{name}</a>" in html, name
+    news = client.get("/news").get_data(as_text=True)
+    for name in ["북미", "일본", "중국", "동남아", "유럽", "남미", "호주", "아프리카"]:
+        assert name in news, name
+
+
+def test_upgrade_maps_legacy_countries(app):
+    from app.upgrade import upgrade_data
+
+    old = [make_post(board="politics", title=f"old {c}", country=c) for c in ("us", "reddit", "youtube", "jp")]
+    db.session.add(CollectedItem(source_type="youtube", url="https://www.youtube.com/watch?v=abcdefghijk",
+                                 title="v", country="youtube"))
+    db.session.commit()
+    upgrade_data()
+    assert [db.session.get(Post, p.id).country for p in old] == ["na", None, None, "jp"]
+    assert CollectedItem.query.one().country is None
+    upgrade_data()  # 다시 실행해도 그대로
+    assert [db.session.get(Post, p.id).country for p in old] == ["na", None, None, "jp"]

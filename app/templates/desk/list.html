@@ -38,7 +38,7 @@
       <div class="post-text">
         <div class="post-title">
           <span class="cat cat-{{ it.category_ko or it.category_hint }}">{{ board_name(it.category_ko or it.category_hint) }}</span>
-          <span class="flag">{{ COUNTRIES.get(it.country, COUNTRIES['etc'])[1] }}</span>
+          <span class="site-tag">{{ SITE_NAMES.get(it.source_type, it.source_type) }}</span>{% if it.country in COUNTRIES %}<span class="flag" title="{{ country_label(it.country) }}">{{ country_flag(it.country) }}</span>{% endif %}
           {{ it.title_ko or it.title }}
           {% if it.num_comments %}<span class="cnt">[댓글 {{ it.num_comments }}]</span>{% endif %}
         </div>
