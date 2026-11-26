@@ -150,6 +150,68 @@ def _save_news_fields(post, form):
         post.source_url = post.country = post.image_url = None
 
 
+# ---------------------------------------------------------------- 현지 반응(댓글) 편집기
+# 글쓰기·수정 화면의 '현지 반응' 편집 칸. 각 줄: r-{i}-ref, r-{i}-author, r-{i}-text, r-{i}-score, r-{i}-delete
+#   ref = "o:<수집 댓글 번호>" (수집함 댓글) / "r:<Reaction id>" (기존 반응) / "" (새로 추가)
+MAX_REACTIONS = 200
+
+
+def _rows_from_item(item):
+    translated = item.comments_ko or []
+    return [dict(ref=f"o:{i}", author=c.get("author") or "", score=c.get("score") or 0,
+                 text=(translated[i] if i < len(translated) and translated[i] else c.get("body") or ""))
+            for i, c in enumerate(item.comments or [])]
+
+
+def _rows_from_post(post):
+    return [dict(ref=f"r:{r.id}", author=r.author or "", score=r.score or 0, text=r.body_ko or r.body)
+            for r in post.reactions]
+
+
+def _rows_from_form():
+    try:
+        count = min(int(request.form.get("r_count", 0)), MAX_REACTIONS)
+    except ValueError:
+        count = 0
+    rows = []
+    for i in range(count):
+        f = lambda k: (request.form.get(f"r-{i}-{k}") or "").strip()  # noqa: E731
+        if f("ref") == "" and not f("text"):
+            continue  # 비어 있는 새 줄
+        try:
+            score = max(0, int(f("score") or 0))
+        except ValueError:
+            score = 0
+        rows.append(dict(ref=f("ref"), author=f("author")[:100], text=f("text")[:5000], score=score,
+                         delete=f("delete") == "1"))
+    return rows
+
+
+def _apply_reactions(post, rows, item=None):
+    """편집기 내용을 게시글의 현지 반응에 반영한다. 원문(body)은 서버에 있는 값만 쓴다."""
+    existing = {r.id: r for r in post.reactions}
+    originals = (item.comments or []) if item else []
+    keep, position = set(), 0
+    for row in rows:
+        if row["delete"] or not row["text"]:
+            continue
+        ref = row["ref"]
+        if ref.startswith("r:") and ref[2:].isdigit() and int(ref[2:]) in existing:
+            r = existing[int(ref[2:])]
+        else:
+            original, source = row["text"], "manual"
+            if ref.startswith("o:") and ref[2:].isdigit() and int(ref[2:]) < len(originals):
+                original, source = originals[int(ref[2:])].get("body") or row["text"], item.source_type
+            r = Reaction(body=original, source=source)
+            post.reactions.append(r)
+        r.author, r.body_ko, r.score, r.position = row["author"] or "익명", row["text"], row["score"], position
+        keep.add(id(r))
+        position += 1
+    for r in list(post.reactions):
+        if id(r) not in keep:
+            post.reactions.remove(r)
+
+
 @bp.route("/write", methods=["GET", "POST"])
 @login_required
 def write():
@@ -158,9 +220,11 @@ def write():
     if item and item.status == "published" and item.post:
         flash("이미 게시된 글입니다.", "info")
         return redirect(url_for("main.post_detail", board=item.post.board, post_id=item.post.id))
+    rows = _rows_from_form() if request.method == "POST" else []
     if request.method == "GET":
         if item:
             _prefill_from_item(form, item)
+            rows = _rows_from_item(item)
         elif request.args.get("board") in dict(form.board.choices):
             form.board.data = request.args["board"]
     if not form.board.choices:
@@ -176,13 +240,8 @@ def write():
             post.source_name = item.source_name
             post.lang = item.lang
             post.published_at = item.published_at
-            translated = item.comments_ko or []
-            for i, c in enumerate(item.comments or []):
-                post.reactions.append(Reaction(
-                    position=i, author=(c.get("author") or "")[:100], body=c.get("body") or "",
-                    body_ko=translated[i] if i < len(translated) else None, score=c.get("score", 0),
-                    source=item.source_type,
-                ))
+        if current_user.can_write_news and BOARDS[post.board][1] == "news":
+            _apply_reactions(post, rows, item)
         db.session.add(post)
         db.session.flush()
         if item:
@@ -190,7 +249,7 @@ def write():
         db.session.commit()
         flash("게시글이 등록되었습니다.", "success")
         return redirect(url_for("main.post_detail", board=post.board, post_id=post.id))
-    return render_template("board/write.html", form=form, post=None, item=item)
+    return render_template("board/write.html", form=form, post=None, item=item, rows=rows)
 
 
 @bp.route("/post/<int:post_id>/edit", methods=["GET", "POST"])
@@ -202,6 +261,7 @@ def edit(post_id):
     form = _prepare_form(PostForm(obj=post))
     if post.board not in dict(form.board.choices):  # 예: 기자 자격을 잃은 회원의 기존 해외 반응 글
         form.board.choices.insert(0, (post.board, BOARDS[post.board][0]))
+    rows = _rows_from_form() if request.method == "POST" else _rows_from_post(post)
     if form.validate_on_submit():
         if form.board.data != post.board and not can_write_board(current_user, form.board.data):
             abort(403)
@@ -209,10 +269,12 @@ def edit(post_id):
         post.title = form.title.data.strip()
         post.body = form.body.data.strip()
         _save_news_fields(post, form)
+        if current_user.can_write_news and BOARDS[post.board][1] == "news":
+            _apply_reactions(post, rows)
         db.session.commit()
         flash("수정되었습니다.", "success")
         return redirect(url_for("main.post_detail", board=post.board, post_id=post.id))
-    return render_template("board/write.html", form=form, post=post, item=None)
+    return render_template("board/write.html", form=form, post=post, item=None, rows=rows)
 
 
 # ---------------------------------------------------------------- 기자 지원

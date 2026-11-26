@@ -15,7 +15,7 @@
   <div class="notice">
     수집함 <a href="{{ url_for('desk.item', item_id=item.id) }}">#{{ item.id }}</a>의 {{ '번역한 ' if item.translate_status == 'done' }}내용으로 채웠습니다.
     제목과 번역문을 다듬은 뒤 등록하세요.
-    {% if item.comments %}{{ '번역된 ' if item.translate_status == 'done' }}댓글 <strong>{{ item.comments|length }}개</strong>가 '현지 반응'으로 함께 게시됩니다.{% endif %}
+    {% if item.comments %}아래 '현지 반응' 칸의 {{ '번역된 ' if item.translate_status == 'done' }}댓글 <strong>{{ item.comments|length }}개</strong>도 다듬어서 함께 게시할 수 있습니다.{% endif %}
   </div>
   {% if item.translate_status != 'done' %}
   <div class="flash flash-danger">아직 번역하지 않은 글이라 원문(외국어)이 채워져 있습니다. 댓글도 원문으로 게시됩니다.
@@ -28,13 +28,14 @@
     {{ field(form.title, maxlength=200) }}
     {{ field(form.body, rows=14, hint='HTML은 사용할 수 없으며, 링크는 자동으로 연결됩니다.') }}
     {% if current_user.can_write_news %}
-    <fieldset class="news-fields" id="news-fields">
+    <fieldset class="news-fields news-only" id="news-fields">
       <legend>해외 반응 글 정보</legend>
       {{ field(form.source_url, placeholder='https://') }}
       {{ field(form.country) }}
       {{ field(form.image_url, placeholder='https://', hint='원문 기사의 대표 이미지. 저작권을 확인한 뒤 사용하세요.') }}
       {% if form.image_url.data %}<img class="preview-img" src="{{ form.image_url.data }}" alt="대표 이미지 미리보기" referrerpolicy="no-referrer">{% endif %}
     </fieldset>
+    {% include "partials/reaction_editor.html" %}
     {% endif %}
     <div class="actions">
       <button class="btn btn-primary">{{ '수정' if post else '등록' }}</button>
@@ -46,8 +47,11 @@
 <script>
   (function () {
     var newsBoards = {{ NEWS_BOARDS|tojson }};
-    var select = document.getElementById('board'), box = document.getElementById('news-fields');
-    function sync() { box.hidden = newsBoards.indexOf(select.value) === -1; }
+    var select = document.getElementById('board'), boxes = document.querySelectorAll('.news-only');
+    function sync() {
+      var off = newsBoards.indexOf(select.value) === -1;
+      boxes.forEach(function (b) { b.hidden = off; });
+    }
     select.addEventListener('change', sync); sync();
   })();
 </script>

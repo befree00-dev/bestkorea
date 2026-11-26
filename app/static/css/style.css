@@ -264,3 +264,15 @@ code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size:
 .cat-it { --cat: #0b7f9c; }
 .cat-society { --cat: #8a5a2b; }
 @media (prefers-color-scheme: dark) { .cat-it { --cat: #5fd0ea; } .cat-society { --cat: #e0aa72; } }
+
+/* 현지 반응 편집기 */
+.reaction-editor .r-row { border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 8px; background: var(--surface); }
+.reaction-editor .r-row-head { display: flex; gap: 8px; align-items: center; margin-bottom: 6px; }
+.reaction-editor .r-row-head input[type=text] { flex: 1; min-width: 0; padding: 5px 8px; }
+.reaction-editor .r-score-label { display: flex; align-items: center; gap: 4px; color: var(--accent); font-size: 13px; white-space: nowrap; }
+.reaction-editor .r-score-label input { width: 80px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; }
+.reaction-editor textarea { min-height: 52px; overflow: hidden; }
+.reaction-editor .r-removed { opacity: .45; }
+.reaction-editor .r-removed textarea, .reaction-editor .r-removed input[type=text] { text-decoration: line-through; }
+#r-add { margin: 4px 0 12px; }
+fieldset[hidden] { display: none; }

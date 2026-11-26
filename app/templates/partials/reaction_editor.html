@@ -1,0 +1,56 @@
+{# 현지 반응(댓글) 편집기. rows: [{ref, author, text, score}] #}
+<fieldset class="news-fields news-only reaction-editor" id="reaction-editor">
+  <legend>현지 반응 (댓글) <span class="cnt" id="r-total">{{ rows|length }}</span></legend>
+  <p class="small muted">게시글 아래 '현지 반응'으로 표시됩니다. 내용을 고치거나, 필요 없는 댓글은 '빼기'를 누르세요.
+    맨 아래 버튼으로 댓글을 직접 추가할 수도 있습니다.</p>
+  <input type="hidden" name="r_count" id="r_count" value="{{ rows|length }}">
+  <div id="r-rows">
+    {% for r in rows %}
+    <div class="r-row{{ ' r-removed' if r.delete }}">
+      <input type="hidden" name="r-{{ loop.index0 }}-ref" value="{{ r.ref }}">
+      <input type="hidden" name="r-{{ loop.index0 }}-delete" value="{{ '1' if r.delete else '0' }}" class="r-delete">
+      <div class="r-row-head">
+        <input type="text" name="r-{{ loop.index0 }}-author" value="{{ r.author }}" placeholder="작성자" maxlength="100" aria-label="작성자">
+        <label class="r-score-label">▲ <input type="number" name="r-{{ loop.index0 }}-score" value="{{ r.score }}" min="0" aria-label="추천 수"></label>
+        <button type="button" class="btn small r-toggle">{{ '되살리기' if r.delete else '빼기' }}</button>
+      </div>
+      <textarea name="r-{{ loop.index0 }}-text" rows="2" maxlength="5000" aria-label="댓글 내용">{{ r.text }}</textarea>
+    </div>
+    {% endfor %}
+  </div>
+  <button type="button" class="btn small" id="r-add">+ 댓글 추가</button>
+</fieldset>
+<script>
+  (function () {
+    var wrap = document.getElementById("r-rows"), count = document.getElementById("r_count"),
+        total = document.getElementById("r-total");
+    function refresh() { total.textContent = wrap.querySelectorAll(".r-row:not(.r-removed)").length; }
+    function autosize(t) { t.style.height = "auto"; t.style.height = (t.scrollHeight + 2) + "px"; }
+    wrap.addEventListener("click", function (e) {
+      if (!e.target.classList.contains("r-toggle")) return;
+      var row = e.target.closest(".r-row"), del = row.querySelector(".r-delete");
+      var removed = row.classList.toggle("r-removed");
+      del.value = removed ? "1" : "0";
+      e.target.textContent = removed ? "되살리기" : "빼기";
+      refresh();
+    });
+    wrap.addEventListener("input", function (e) { if (e.target.tagName === "TEXTAREA") autosize(e.target); });
+    document.getElementById("r-add").addEventListener("click", function () {
+      var i = parseInt(count.value, 10);
+      var row = document.createElement("div");
+      row.className = "r-row";
+      row.innerHTML =
+        '<input type="hidden" name="r-' + i + '-ref" value="">' +
+        '<input type="hidden" name="r-' + i + '-delete" value="0" class="r-delete">' +
+        '<div class="r-row-head"><input type="text" name="r-' + i + '-author" placeholder="작성자" maxlength="100" aria-label="작성자">' +
+        '<label class="r-score-label">▲ <input type="number" name="r-' + i + '-score" value="0" min="0" aria-label="추천 수"></label>' +
+        '<button type="button" class="btn small r-toggle">빼기</button></div>' +
+        '<textarea name="r-' + i + '-text" rows="2" maxlength="5000" placeholder="댓글 내용" aria-label="댓글 내용"></textarea>';
+      wrap.appendChild(row);
+      count.value = i + 1;
+      row.querySelector("textarea").focus();
+      refresh();
+    });
+    wrap.querySelectorAll("textarea").forEach(autosize);
+  })();
+</script>

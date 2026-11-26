@@ -174,6 +174,16 @@ def test_cli_make_admin_transfers(app):
 
 
 # ------------------------------------------------------------------ 수집함 → 게시
+def reaction_fields(rows):
+    """글쓰기 화면의 현지 반응 편집기 입력값. rows: (ref, author, text, score[, delete])"""
+    data = {"r_count": str(len(rows))}
+    for i, row in enumerate(rows):
+        ref, author, text, score = row[:4]
+        data.update({f"r-{i}-ref": ref, f"r-{i}-author": author, f"r-{i}-text": text, f"r-{i}-score": str(score),
+                     f"r-{i}-delete": "1" if len(row) > 4 and row[4] else "0"})
+    return data
+
+
 def _translated_item():
     item = CollectedItem(
         source_type="reddit", url="https://www.reddit.com/r/korea/comments/abc/x/", title="Seoul subway is amazing",
@@ -198,7 +208,8 @@ def test_publish_from_desk_item(client):
     assert "<summary>원문</summary>" not in client.get(f"/desk/{item.id}").get_data(as_text=True)
     r = client.post("/write", data=dict(board="politics", title="서울 지하철은 놀랍다", body="요약입니다.",
                                         source_url=item.url, country="na", image_url=item.image_url,
-                                        from_item=str(item.id)))
+                                        from_item=str(item.id), **reaction_fields([
+                                            ("o:0", "alice", "완전 동의!", 120), ("o:1", "bob", "최고의 대중교통", 80)])))
     post = Post.query.one()
     assert r.status_code == 302 and post.original_title == "Seoul subway is amazing"
     assert [(x.body, x.body_ko) for x in post.reactions] == [("Totally agree!", "완전 동의!"), ("Best transit", "최고의 대중교통")]
@@ -326,3 +337,59 @@ def test_upgrade_maps_legacy_countries(app):
     assert CollectedItem.query.one().country is None
     upgrade_data()  # 다시 실행해도 그대로
     assert [db.session.get(Post, p.id).country for p in old] == ["na", None, None, "jp"]
+
+
+def test_reaction_editor_prefilled_from_item(client):
+    make_user("o", "operator")
+    item = _translated_item()
+    login(client, "o@example.com")
+    html = client.get(f"/write?from_item={item.id}").get_data(as_text=True)
+    assert 'name="r_count" id="r_count" value="2"' in html
+    assert 'name="r-0-ref" value="o:0"' in html and ">완전 동의!</textarea>" in html  # 번역문으로 채움
+
+
+def test_edit_remove_add_reactions_when_publishing(client):
+    make_user("o", "operator")
+    item = _translated_item()
+    login(client, "o@example.com")
+    client.post("/write", data=dict(board="society", title="서울 지하철", body="본문", country="na",
+                                    from_item=str(item.id), **reaction_fields([
+                                        ("o:0", "alice", "완전히 동의함 (수정)", 120),
+                                        ("o:1", "bob", "최고의 대중교통", 80, True),  # 빼기
+                                        ("", "직접추가", "운영자가 넣은 반응", 5),
+                                        ("", "", "", 0),  # 비어 있는 새 줄은 무시
+                                    ])))
+    post = Post.query.one()
+    assert [(r.author, r.body_ko, r.body, r.score, r.source) for r in post.reactions] == [
+        ("alice", "완전히 동의함 (수정)", "Totally agree!", 120, "reddit"),  # 원문은 서버 값 유지
+        ("직접추가", "운영자가 넣은 반응", "운영자가 넣은 반응", 5, "manual"),
+    ]
+
+
+def test_edit_reactions_on_existing_post(client):
+    reporter = make_user("r", "reporter")
+    post = make_post(board="sports", title="기사", user_id=reporter.id)
+    post.reactions.append(Reaction(position=0, author="a", body="orig a", body_ko="번역 a", score=3))
+    post.reactions.append(Reaction(position=1, author="b", body="orig b", body_ko="번역 b", score=9))
+    db.session.commit()
+    ra, rb = post.reactions
+    login(client, "r@example.com")
+    html = client.get(f"/post/{post.id}/edit").get_data(as_text=True)
+    assert f'value="r:{ra.id}"' in html and ">번역 b</textarea>" in html
+    client.post(f"/post/{post.id}/edit", data=dict(board="sports", title="기사", body="본문", country="",
+                                                   **reaction_fields([(f"r:{rb.id}", "b", "번역 b (고침)", 9),
+                                                                      (f"r:{ra.id}", "a", "번역 a", 3, True)])))
+    post = db.session.get(Post, post.id)
+    assert [(r.author, r.body_ko, r.body) for r in post.reactions] == [("b", "번역 b (고침)", "orig b")]
+    assert Reaction.query.count() == 1
+    page = client.get(f"/b/sports/{post.id}").get_data(as_text=True)
+    assert "번역 b (고침)" in page
+
+
+def test_member_cannot_add_reactions_to_community_post(client):
+    make_user("m")
+    login(client, "m@example.com")
+    assert "현지 반응 (댓글)" not in client.get("/write").get_data(as_text=True)
+    client.post("/write", data=dict(board="free", title="자유글", body="내용",
+                                    **reaction_fields([("", "x", "몰래 넣은 반응", 1)])))
+    assert Post.query.one().reactions == [] and Reaction.query.count() == 0
