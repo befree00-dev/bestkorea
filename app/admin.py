@@ -1,12 +1,12 @@
-"""관리자(1명) 전용: 회원 등급 관리, 기자 지원 승인, 수집 현황."""
+"""관리자(1명) 전용: 회원 등급 관리, 기자 지원 승인."""
 from functools import wraps
 
-from flask import Blueprint, abort, current_app, flash, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from .constants import ASSIGNABLE_ROLES, ROLE_MEMBER, ROLE_REPORTER, ROLES
 from .extensions import db
-from .models import CollectLog, Comment, Post, ReporterApplication, User, utcnow
+from .models import CollectedItem, Comment, Post, ReporterApplication, User, utcnow
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -25,8 +25,6 @@ def admin_required(f):
 @bp.route("/")
 @admin_required
 def dashboard():
-    from .collector import site_status, today_counts
-
     role_filter = request.args.get("role")
     users = User.query
     if role_filter in ROLES:
@@ -36,9 +34,7 @@ def dashboard():
         users = users.filter(User.username.ilike(f"%{q}%") | User.email.ilike(f"%{q}%"))
     return render_template(
         "admin/dashboard.html",
-        logs=CollectLog.query.order_by(CollectLog.id.desc()).limit(10).all(),
-        today=today_counts(),
-        sites=site_status(current_app.config),
+        inbox_new=CollectedItem.query.filter_by(status="new").count(),
         stats=dict(users=User.query.count(), posts=Post.query.count(), comments=Comment.query.count()),
         role_counts={r: User.query.filter_by(role=r).count() for r in ROLES},
         users=users.order_by(User.id.desc()).limit(100).all(),
@@ -82,16 +78,6 @@ def decide_application(app_id, decision):
         flash(f"{application.user.username} 님의 기자 지원을 반려했습니다.", "info")
     db.session.commit()
     return redirect(url_for("admin.dashboard"))
-
-
-@bp.route("/collect", methods=["POST"])
-@admin_required
-def collect_now():
-    from .collector import run_collection
-
-    run = run_collection()
-    flash(f"수집 완료: 추가 {run.added}건, 교체 {run.skipped}건" + (" (오류 있음)" if run.errors else ""), "info")
-    return redirect(request.referrer or url_for("admin.dashboard"))
 
 
 @bp.route("/user/<int:user_id>/ban", methods=["POST"])

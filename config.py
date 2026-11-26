@@ -54,26 +54,15 @@ class Config:
     SHOW_AD_PLACEHOLDERS = _bool("SHOW_AD_PLACEHOLDERS", True)
     GOOGLE_ANALYTICS_ID = os.environ.get("GOOGLE_ANALYTICS_ID", "")
 
-    # --- 자동 수집 (수집함에만 쌓이고, 사이트 게시는 운영자가 직접) ---
-    ENABLE_SCHEDULER = _bool("ENABLE_SCHEDULER", False)
-    COLLECT_INTERVAL_MINUTES = int(os.environ.get("COLLECT_INTERVAL_MINUTES", 180))
-    MIN_COMMENTS = int(os.environ.get("MIN_COMMENTS", 10))  # 댓글이 이만큼 이상인 글만 수집
-    PER_SITE_DAILY = int(os.environ.get("PER_SITE_DAILY", 10))  # 사이트별 하루(한국 시간) 수집 개수
+    # --- 수집함: 운영자가 브라우저에서 가져온 게시물 ---
+    MIN_COMMENTS = int(os.environ.get("MIN_COMMENTS", 10))  # 댓글이 이만큼 이상인 글만 받음
     COMMENTS_PER_ITEM = int(os.environ.get("COMMENTS_PER_ITEM", 50))  # 글당 저장·번역할 댓글 수 (인기순)
-    HTTP_USER_AGENT = os.environ.get("HTTP_USER_AGENT", "web:bestkorea-collector:1.0")
-    # 원문 기사 본문을 가져올 때 쓰는 브라우저 User-Agent (일부 언론사는 봇 UA를 차단)
+    # 번역 시 원문 기사 본문을 가져올 때 쓰는 브라우저 User-Agent (일부 언론사는 봇 UA를 차단)
     ARTICLE_USER_AGENT = os.environ.get(
         "ARTICLE_USER_AGENT",
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/130.0 Safari/537.36",
     )
-    # YouTube Data API v3 키 (Google Cloud 콘솔에서 무료 발급, 하루 10,000 할당량)
-    YOUTUBE_API_KEY = os.environ.get("YOUTUBE_API_KEY", "")
-    # X(트위터) API v2 Bearer 토큰 (developer.x.com, 유료 요금제 필요). 읽은 게시물 수만큼 사용량 차감
-    X_BEARER_TOKEN = os.environ.get("X_BEARER_TOKEN", "")
-    X_INTERVAL_HOURS = int(os.environ.get("X_INTERVAL_HOURS", 6))  # X 검색 최소 간격
-    X_SEARCH_MAX_RESULTS = int(os.environ.get("X_SEARCH_MAX_RESULTS", 50))  # 검색 1회에 읽을 게시물 (10~100)
-    X_REPLIES_PER_ITEM = int(os.environ.get("X_REPLIES_PER_ITEM", 20))  # 게시물당 읽을 답글 (10~100)
 
     # --- 수집함 '번역' 버튼: Claude API (ANTHROPIC_API_KEY 필요) ---
     ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5")
@@ -88,6 +77,5 @@ class TestConfig(Config):
     SQLALCHEMY_ENGINE_OPTIONS = {}
     ADMIN_EMAIL = ""
     WTF_CSRF_ENABLED = False
-    ENABLE_SCHEDULER = False
     TRANSLATE_SYNC = True
     SECRET_KEY = "test"

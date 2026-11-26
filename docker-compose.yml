@@ -1,4 +1,4 @@
-# 로컬 테스트용: 웹 + 수집기(수집함에 쌓기) + PostgreSQL
+# 로컬 테스트용: 웹 + PostgreSQL
 #   docker compose up -d --build      → http://localhost:8000
 # 설정은 같은 폴더의 .env 파일 값이 있으면 그 값을, 없으면 아래 기본값을 사용합니다.
 name: bestkorea
@@ -10,21 +10,14 @@ x-app-env: &app-env
   ADMIN_EMAIL: ${ADMIN_EMAIL:-}
   SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
   BEHIND_PROXY: ${BEHIND_PROXY:-false}
-  ENABLE_SCHEDULER: "false"
   SHOW_AD_PLACEHOLDERS: ${SHOW_AD_PLACEHOLDERS:-true}
   ADSENSE_CLIENT: ${ADSENSE_CLIENT:-}
   ADSENSE_SLOT_TOP: ${ADSENSE_SLOT_TOP:-}
   ADSENSE_SLOT_SIDEBAR: ${ADSENSE_SLOT_SIDEBAR:-}
   ADSENSE_SLOT_IN_ARTICLE: ${ADSENSE_SLOT_IN_ARTICLE:-}
   ADSENSE_SLOT_IN_FEED: ${ADSENSE_SLOT_IN_FEED:-}
-  # 수집: YouTube Data API 키, 최근 24시간 댓글 MIN_COMMENTS 개 이상, 사이트별 하루 PER_SITE_DAILY 개
-  YOUTUBE_API_KEY: ${YOUTUBE_API_KEY:-}
-  X_BEARER_TOKEN: ${X_BEARER_TOKEN:-}
-  X_INTERVAL_HOURS: ${X_INTERVAL_HOURS:-6}
-  X_SEARCH_MAX_RESULTS: ${X_SEARCH_MAX_RESULTS:-50}
-  X_REPLIES_PER_ITEM: ${X_REPLIES_PER_ITEM:-20}
+  # 수집함: 브라우저에서 가져올 때 댓글 MIN_COMMENTS 개 이상, 글당 댓글 COMMENTS_PER_ITEM 개
   MIN_COMMENTS: ${MIN_COMMENTS:-10}
-  PER_SITE_DAILY: ${PER_SITE_DAILY:-10}
   COMMENTS_PER_ITEM: ${COMMENTS_PER_ITEM:-50}
   # 수집함 '번역' 버튼 (Claude API)
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
@@ -62,18 +55,6 @@ services:
       interval: 5s
       timeout: 3s
       retries: 20
-    restart: unless-stopped
-
-  # 시작하자마자 한 번 수집하고, 이후 COLLECT_EVERY_SECONDS(기본 3시간)마다 반복
-  collector:
-    image: bestkorea:latest
-    environment:
-      <<: *app-env
-      COLLECT_EVERY_SECONDS: ${COLLECT_EVERY_SECONDS:-10800}
-    command: ["python", "collect_loop.py"]
-    depends_on:
-      web:
-        condition: service_healthy
     restart: unless-stopped
 
 volumes:

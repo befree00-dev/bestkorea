@@ -5,21 +5,11 @@
 <div class="board-head">
   <div>
     <h1>수집함</h1>
-    <p class="muted">관리자·운영자 전용. 사이트별로 하루(한국 시간) 댓글이 가장 많은 한국 관련 글 {{ cfg.PER_SITE_DAILY }}개씩
-      (최근 24시간 게시, 댓글 {{ cfg.MIN_COMMENTS }}개 이상)을 모읍니다. 번역해서 해외 반응 게시판에 올리세요.</p>
-    <p class="small">오늘 수집:
-      {% for code, name, on, missing in sites %}
-        <strong>{{ name }}</strong> {{ today[code] }}/{{ cfg.PER_SITE_DAILY }}{% if not on %} <span class="likes">(꺼짐: {{ missing }})</span>{% endif %}{{ ' · ' if not loop.last }}
-      {% endfor %}</p>
+    <p class="muted">관리자·운영자 전용. Reddit · YouTube · X에서 브라우저로 가져온 한국 관련 글(댓글 {{ cfg.MIN_COMMENTS }}개 이상)을
+      번역해서 해외 반응 게시판에 올리세요.</p>
   </div>
   <div class="desk-toolbar">
-  <a class="btn" href="{{ url_for('desk.import_reddit') }}">Reddit 가져오기</a>
-  {% if current_user.is_admin %}
-  <form action="{{ url_for('admin.collect_now') }}" method="post">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <button class="btn">지금 수집</button>
-  </form>
-  {% endif %}
+    <a class="btn btn-primary" href="{{ url_for('desk.import_page') }}">브라우저에서 가져오기</a>
   </div>
 </div>
 
@@ -29,10 +19,9 @@
   {% endfor %}
   <span class="sep-v" aria-hidden="true"></span>
   <a class="chip {{ 'active' if not request.args.get('source') }}" href="{{ url_with(source=None, page=None) }}">전체 사이트</a>
-  {% for code, site in SITES.items() %}
-  <a class="chip {{ 'active' if request.args.get('source') == code }}" href="{{ url_with(source=code, page=None) }}">{{ site.name }}</a>
+  {% for code, name in SITE_NAMES.items() %}
+  <a class="chip {{ 'active' if request.args.get('source') == code }}" href="{{ url_with(source=code, page=None) }}">{{ name }}</a>
   {% endfor %}
-  <a class="chip {{ 'active' if request.args.get('source') == 'reddit' }}" href="{{ url_with(source='reddit', page=None) }}">Reddit (직접 가져옴)</a>
   <a class="chip {{ 'active' if request.args.get('sort') == 'comments' }}" href="{{ url_with(sort=None if request.args.get('sort') == 'comments' else 'comments', page=None) }}">댓글 많은 순</a>
   <a class="chip {{ 'active' if request.args.get('translated') == '1' }}" href="{{ url_with(translated=None if request.args.get('translated') == '1' else '1', page=None) }}">번역 완료만</a>
 </div>

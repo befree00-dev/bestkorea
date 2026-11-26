@@ -55,11 +55,6 @@ def create_app(config_class=Config):
     with app.app_context():
         db.create_all()
 
-    if app.config["ENABLE_SCHEDULER"] and not app.config.get("TESTING"):
-        from .scheduler import start_scheduler
-
-        start_scheduler(app)
-
     return app
 
 

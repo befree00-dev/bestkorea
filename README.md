@@ -1,7 +1,7 @@
 # BestKorea
 
 해외 각국(미국·일본·중국·유럽·남미·호주) 언론과 커뮤니티의 한국 관련 뉴스와 현지인 반응을 소개하는 뉴스/커뮤니티 사이트입니다.
-**모든 게시물은 사람이 직접 올립니다.** 수집기는 관리자·운영자 전용 '수집함'에 후보 글을 모아 주고, 운영자가 번역 버튼으로 본문과 댓글을 번역한 뒤 다듬어 게시합니다.
+**모든 게시물은 사람이 직접 올립니다.** 운영자가 Reddit·YouTube·X에서 고른 글을 브라우저 버튼으로 관리자·운영자 전용 '수집함'에 가져오고, 번역 버튼으로 본문과 댓글을 번역한 뒤 다듬어 게시합니다. 자동 수집은 하지 않습니다.
 
 ## 회원 등급
 
@@ -23,7 +23,7 @@
 |---|---|
 | 해외 반응 게시판 | 정치·사회 / 경제 / 연예 / 스포츠 / 게임 / 기타 (국가별 필터, 최신·추천순, 검색), 원문 링크·대표 이미지·현지 반응(번역 댓글) |
 | 커뮤니티 | 유머게시판, 자유게시판 |
-| 수집함 (관리자·운영자) | 사이트별로 **최근 24시간 한국 관련 게시물 중 댓글 많은 글 하루 10개씩** (댓글 10개 이상, 한국 시간 기준). 현재 지원: **YouTube** (공식 Data API, 7개 언어 검색, 한국어 영상 제외, 인기 댓글 최대 50개), **X(트위터)** (공식 API v2, 토큰이 있을 때만, 답글 = 댓글). 수집할 때마다 댓글 수를 다시 비교해 더 인기 있는 글로 교체 (운영자가 손댄 글은 유지). 상태·사이트·댓글순 필터 |
+| 수집함 (관리자·운영자) | 운영자가 Reddit·YouTube·X 게시물 페이지에서 **BestKorea로 가져오기** 버튼(북마클릿)을 누르면 글·댓글을 브라우저가 읽어 수집함에 추가 (댓글 10개 이상, 인기 댓글 최대 50개). API 키 불필요, 서버는 각 사이트에 접속하지 않음. 상태·사이트·댓글순 필터 |
 | 번역 버튼 | 글 상단·하단. 원문(기사·게시물 본문 또는 영상 설명)과 대표 이미지를 가져와 Claude로 **본문 전체 번역**(문단 유지), **댓글 전체 번역**(하단 배치, 번역문만 표시), 카테고리 추천 → **게시글로 작성**하면 번역 내용이 채워진 글쓰기 화면으로 이동 |
 | 수익화 | Google AdSense 슬롯 4곳, `ads.txt` 자동 생성, 개인정보처리방침(쿠키·광고 고지) |
 | SEO | 페이지별 title/description/OG 태그, canonical, `sitemap.xml`, `robots.txt` |
@@ -31,7 +31,7 @@
 
 ## 운영 흐름
 
-1. 수집기가 3시간마다 사이트별 당일 인기 글(하루 10개)을 **수집함**에 넣음 (사이트에는 게시되지 않음)
+1. 운영자가 Reddit·YouTube·X에서 글을 보다가 즐겨찾기 막대의 **BestKorea로 가져오기**를 누르면 **수집함**에 추가됨 (사이트에는 게시되지 않음)
 2. 운영자가 수집함에서 글을 열고 **번역** 클릭 → 수십 초~몇 분 뒤 한국어 제목, 본문 번역, 이미지, 번역 댓글 표시
 3. **게시글로 작성** → 제목·번역문·원문 링크·이미지·카테고리가 채워진 글쓰기 화면에서 다듬어 등록
 4. 번역된 댓글은 게시글의 "현지 반응"으로 함께 올라가고, 수집함 글은 '게시됨'으로 바뀜
@@ -46,25 +46,26 @@ FLASK_APP=wsgi .venv/bin/flask run
 
 - http://localhost:5000 접속 → `ADMIN_EMAIL`(비우면 첫 가입자)로 가입한 회원이 관리자가 됩니다.
 - 화면 확인용 샘플 데이터: `FLASK_APP=wsgi .venv/bin/flask seed-demo` — 운영자·기자·회원 샘플 계정(비밀번호 `demo12345`)과 수집함 샘플이 생깁니다. 운영 DB에는 사용하지 마세요.
-- 수동 수집: `FLASK_APP=wsgi .venv/bin/flask collect`
 - 등급 변경(CLI): `flask set-role 이메일 operator|reporter|member`, 관리자 넘기기: `flask make-admin 이메일`
 - 테스트: `.venv/bin/python -m pytest -q`
 
-## 수집 사이트와 API 키
+## 브라우저에서 가져오기
 
-| 사이트 | 상태 | 필요한 것 |
+수집함 → **브라우저에서 가져오기**에서 **BestKorea로 가져오기** 버튼을 브라우저 즐겨찾기 막대로 끌어다 놓으면 준비 끝입니다.
+
+| 사이트 | 어디서 누르나 | 읽는 방법 |
 |---|---|---|
-| YouTube | 지원 | `YOUTUBE_API_KEY` — Google Cloud 콘솔 → 새 프로젝트 → "YouTube Data API v3" 사용 설정 → 사용자 인증 정보 → API 키. 무료 할당량 하루 10,000 (3시간마다 수집 시 약 6,000 사용) |
-| X(트위터) | 지원 (선택) | `X_BEARER_TOKEN` — developer.x.com 개발자 포털 → 프로젝트·앱 생성 → Bearer Token. **게시물 검색(최근 검색)이 되는 유료 요금제 필요.** 읽은 게시물 수만큼 월 사용량이 차감되므로 기본값은 6시간마다 검색 1회(50개) + 새 글당 답글 20개로 아껴 씀 (`X_INTERVAL_HOURS`, `X_SEARCH_MAX_RESULTS`, `X_REPLIES_PER_ITEM`). 하루 약 400~500건, 월 1만~1만5천 건 정도 |
-| Reddit | 운영자가 직접 가져오기 | 서버 자동 수집은 Reddit 이 차단하므로, 수집함 → **Reddit 가져오기**의 버튼을 즐겨찾기 막대에 등록해 두고 Reddit 글에서 누르면 수집함에 추가 (댓글 10개 이상, 인기 댓글 최대 50개). 자동 전달이 안 되면 붙여넣기로 추가 |
-| TikTok, Instagram, Yahoo Japan, Baidu | 미지원 | 일반 개발자용 공식 수집 경로가 없거나 제한적 (아래 '다른 사이트' 참고) |
+| Reddit | 게시글 페이지 | 글 주소 + `.json` (운영자 브라우저에서 요청) |
+| YouTube | 영상 페이지 (`youtube.com/watch?v=…`, 쇼츠 제외) | 페이지의 영상 정보 + 화면을 자동으로 내리며 불러온 댓글 (최대 20초) |
+| X | 게시물 페이지 (`x.com/아이디/status/…`, 로그인 필요) | 화면의 게시물 + 자동으로 내리며 불러온 답글 ('더 찾아보기' 등 다른 섹션 제외, 최대 20초) |
 
-키가 없으면 해당 사이트는 수집하지 않고, 수집함과 관리자 화면에 '꺼짐'으로 표시됩니다.
-검색어는 `app/collector/sources.py`에서 수정합니다.
+- 버튼을 누르면 새 탭으로 가져오기 페이지가 열리고 데이터가 전달되어 수집함에 저장됩니다. 팝업이 차단되면 허용하세요.
+- 새 탭으로 전달이 안 되면 원래 페이지 오른쪽 위의 **데이터 복사** 버튼을 눌러 가져오기 페이지에 붙여넣습니다.
+- 버튼에는 사이트 주소가 들어 있으므로 도메인이 바뀌면 다시 등록합니다.
+- YouTube·X는 화면 구조를 읽는 방식이라 사이트 개편 시 동작이 멈출 수 있습니다. 그때는 `app/templates/desk/_grabber.js`의 선택자를 고칩니다.
+- 브라우저에서 읽은 값은 서버에서 다시 검증합니다 (주소는 ID로 다시 만들고, 이미지는 각 사이트 이미지 서버만 허용, 댓글 수 기준 확인).
 
-수집 주기: Docker에서는 수집기 컨테이너가 3시간마다(`COLLECT_EVERY_SECONDS`), 단일 프로세스에서는 `ENABLE_SCHEDULER=true`, 그 밖에는 cron으로 `flask collect`를 실행합니다.
-
-## Docker로 실행 (웹 + 수집기 + PostgreSQL)
+## Docker로 실행 (웹 + PostgreSQL)
 
 Docker Desktop(또는 Docker Engine + Compose)만 있으면 됩니다.
 
@@ -76,14 +77,11 @@ docker compose up -d --build      # http://localhost:8000
 | 컨테이너 | 역할 |
 |---|---|
 | `web` | gunicorn 웹 서버 (포트 8000, `WEB_PORT`로 변경) |
-| `collector` | 시작 직후 한 번 수집, 이후 `COLLECT_EVERY_SECONDS`(기본 10800초=3시간)마다 수집 |
 | `db` | PostgreSQL 16, 데이터는 `pgdata` 볼륨에 보존 |
 
 자주 쓰는 명령:
 
 ```bash
-docker compose logs -f collector                 # 수집 로그
-docker compose exec web flask collect            # 지금 바로 수집
 docker compose exec web flask seed-demo          # 샘플 데이터 (테스트용)
 docker compose exec web flask make-admin 이메일    # 관리자 넘기기
 docker compose exec web flask set-role 이메일 operator   # 운영자 지정
@@ -126,7 +124,7 @@ Nginx 등으로 HTTPS 리버스 프록시를 두고 `SESSION_COOKIE_SECURE=true`
 - X 데이터는 X 개발자 약관을 따릅니다. 게시물을 소개할 때 원문 링크와 작성자(@아이디)를 함께 표시하세요.
 - YouTube 데이터는 YouTube API 서비스 약관을 따릅니다. 게시글에는 영상을 YouTube 공식 플레이어로 삽입하고 원문 링크를 함께 싣습니다. 댓글은 작성자 닉네임과 함께 번역해 소개하며, 요청 시 삭제할 수 있도록 운영하세요.
 
-## 다른 사이트 (미지원 사유)
+## 다른 사이트 (미지원)
 
 | 사이트 | 공식 API | 상황 |
 |---|---|---|
@@ -141,17 +139,14 @@ Nginx 등으로 HTTPS 리버스 프록시를 두고 `SESSION_COOKIE_SECURE=true`
 app/
   __init__.py        앱 팩토리, 템플릿 필터, 에러 페이지
   constants.py       게시판·국가·회원 등급 정의, 게시 권한
-  models.py          User(등급), ReporterApplication, Post, Reaction(현지 반응), Comment, Like,
-                     CollectedItem(수집함), CollectLog
+  models.py          User(등급), ReporterApplication, Post, Reaction(현지 반응), Comment, Like, CollectedItem(수집함)
   views.py           목록/상세/글쓰기(수집함에서 작성 포함)/댓글/추천, 기자 지원, sitemap·robots·ads.txt
-  desk.py            수집함 (관리자·운영자): 목록, 상세, 번역 버튼, 숨기기
-  admin.py           관리자: 등급 관리, 기자 지원 승인, 수집 기록
+  desk.py            수집함 (관리자·운영자): 목록, 상세, 번역 버튼, 숨기기, 브라우저에서 가져오기
+  admin.py           관리자: 등급 관리, 기자 지원 승인
   auth.py            회원가입·로그인
-  collector/         sources.py(검색어), youtube.py(YouTube API), x.py(X API), reddit_import.py(Reddit 가져오기),
-                     fetchers.py(공통), classify.py(분류),
+  collector/         browser_import.py(가져온 데이터 검증), fetchers.py(공통), classify.py(분류),
                      translate.py(원문 추출 + Claude 번역)
-  scheduler.py cli.py
-  templates/ static/
-collect_loop.py      Docker 수집기 컨테이너용 반복 수집
+  templates/desk/_grabber.js   'BestKorea로 가져오기' 버튼 코드 (Reddit·YouTube·X 페이지에서 실행)
+  cli.py templates/ static/
 tests/               권한·수집·번역 테스트 (네트워크 없이 모의 응답 사용)
 ```

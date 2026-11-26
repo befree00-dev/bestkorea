@@ -6,17 +6,6 @@ from .models import User
 
 
 def register_cli(app):
-    @app.cli.command("collect")
-    def collect():
-        """사이트별 당일 댓글 많은 글을 한 번 수집해 수집함에 넣습니다."""
-        from .collector import SITES, run_collection, today_counts
-
-        run = run_collection()
-        counts = ", ".join(f"{SITES[k]['name']} {v}" for k, v in today_counts().items())
-        click.echo(f"추가 {run.added}건, 교체 {run.skipped}건 / 오늘 수집함: {counts}")
-        if run.errors:
-            click.echo("오류:\n" + run.errors)
-
     @app.cli.command("make-admin")
     @click.argument("email")
     def make_admin(email):

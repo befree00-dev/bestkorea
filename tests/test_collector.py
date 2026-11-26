@@ -1,173 +1,13 @@
-from datetime import datetime, timezone
+import json
 from types import SimpleNamespace
 
 import pytest
 
-from app import collector
 from app.collector import translate as tr
-from app.collector import youtube
+from app.collector.browser_import import ImportError_, detect, parse
 from app.collector.classify import classify
-from app.collector.fetchers import mostly_korean
 from app.extensions import db
-from app.models import CollectedItem, CollectLog, Post
-
-# videoId -> (댓글 수 또는 None=댓글 사용 중지, 제목, 오디오 언어)
-VIDEOS = {
-    "vid_en_0001": (5400, "Foreigners try Korean street food", "en"),
-    "vid_en_0002": (3100, "Why K-pop dominates the charts", "en"),
-    "vid_en_0003": (900, "Seoul subway tour", "en-US"),
-    "vid_en_0004": (9, "Only nine comments about Korea", "en"),  # 기준 미달
-    "vid_en_0005": (None, "Comments disabled Korea video", "en"),  # 댓글 사용 중지
-    "vid_ko_0006": (8000, "한국 예능 하이라이트 모음", "ko"),  # 한국어 영상 제외
-    "vid_ja_0007": (2500, "韓国旅行Vlog ソウル", "ja"),
-    "vid_ja_0008": (1500, "韓国の物価が高すぎる", "ja"),
-    "vid_zh_0009": (700, "韩国综艺反应", "zh-Hans"),
-    "vid_hg_0010": (6000, "Korea 한국 여행 브이로그 서울 맛집", ""),  # 제목 대부분 한글 → 제외
-    "vid_es_0011": (400, "Reacción a Corea del Sur", "es"),
-    "vid_pt_0012": (300, "Reagindo à Coreia do Sul", "pt"),
-}
-SEARCH = {
-    "en": ["vid_en_0001", "vid_en_0002", "vid_en_0003", "vid_en_0004", "vid_en_0005", "vid_ko_0006", "vid_hg_0010"],
-    "ja": ["vid_ja_0007", "vid_ja_0008", "vid_en_0001"],  # 중복은 한 번만
-    "zh-Hans": ["vid_zh_0009"], "es": ["vid_es_0011"], "pt": ["vid_pt_0012"], "de": [], "fr": [],
-}
-
-
-class FakeResponse:
-    def __init__(self, data, status=200):
-        self._data, self.status_code, self.text = data, status, str(data)
-
-    def json(self):
-        return self._data
-
-
-class FakeYouTube:
-    def __init__(self, videos=None, quota=False):
-        self.videos = dict(VIDEOS if videos is None else videos)
-        self.quota = quota
-        self.headers = {}
-        self.calls = []
-
-    def get(self, url, params=None, timeout=None):
-        path = url.rsplit("/", 1)[1]
-        self.calls.append((path, dict(params or {})))
-        assert params["key"] == "test-key"
-        if self.quota:
-            return FakeResponse({"error": {"code": 403, "message": "quota", "errors": [{"reason": "quotaExceeded"}]}}, 403)
-        if path == "search":
-            ids = [v for v in SEARCH.get(params["relevanceLanguage"], []) if v in self.videos]
-            return FakeResponse({"items": [{"id": {"videoId": v}} for v in ids]})
-        if path == "videos":
-            items = []
-            for vid in params["id"].split(","):
-                count, title, lang = self.videos[vid]
-                stats = {} if count is None else {"commentCount": str(count)}
-                items.append({"id": vid, "statistics": stats, "snippet": {
-                    "title": title, "description": f"Description of {title}", "channelTitle": "Channel " + vid,
-                    "publishedAt": "2026-11-24T03:00:00Z", "defaultAudioLanguage": lang,
-                    "thumbnails": {"high": {"url": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"}}}})
-            return FakeResponse({"items": items})
-        if path == "commentThreads":
-            return FakeResponse({"items": [
-                {"snippet": {"topLevelComment": {"snippet": {"authorDisplayName": f"@user{i}",
-                                                             "textDisplay": f"comment {i} on {params['videoId']}",
-                                                             "likeCount": 100 - i}}}}
-                for i in range(3)]})
-        raise AssertionError(path)
-
-
-@pytest.fixture(autouse=True)
-def youtube_key(app):
-    app.config.update(YOUTUBE_API_KEY="test-key", PER_SITE_DAILY=10, MIN_COMMENTS=10)
-
-
-# ------------------------------------------------------------------ YouTube 수집
-def test_search_candidates_filters_and_sorts(app):
-    errors = []
-    items = youtube.search_candidates(app.config, FakeYouTube(), errors)
-    assert errors == []
-    assert [i.external_id for i in items] == [
-        "vid_en_0001", "vid_en_0002", "vid_ja_0007", "vid_ja_0008", "vid_en_0003", "vid_zh_0009",
-        "vid_es_0011", "vid_pt_0012",
-    ]  # 댓글 9개·댓글 중지·한국어 영상 제외, 댓글 많은 순
-    first = items[0]
-    assert first.url == "https://www.youtube.com/watch?v=vid_en_0001" and first.num_comments == 5400
-    assert first.image_url.endswith("/hqdefault.jpg") and first.source_name == "Channel vid_en_0001"
-    assert first.published_at == datetime(2026, 11, 24, 3, 0)
-
-
-def test_search_uses_last_24_hours_and_all_languages(app):
-    fake = FakeYouTube()
-    youtube.search_candidates(app.config, fake, [])
-    searches = [p for path, p in fake.calls if path == "search"]
-    assert {p["relevanceLanguage"] for p in searches} == {"en", "ja", "zh-Hans", "es", "pt", "de", "fr"}
-    since = datetime.fromisoformat(searches[0]["publishedAfter"].replace("Z", "+00:00"))
-    assert 23.9 < (datetime.now(timezone.utc) - since).total_seconds() / 3600 < 24.1
-
-
-def test_collect_keeps_top_n_per_site_with_comments(app):
-    app.config.update(PER_SITE_DAILY=3)
-    fake = FakeYouTube()
-    run = collector.run_collection(fake)
-    assert run.added == 3 and run.errors == ""
-    assert Post.query.count() == 0  # 사이트에는 자동 게시하지 않음
-    rows = CollectedItem.query.order_by(CollectedItem.num_comments.desc()).all()
-    assert [r.source_id for r in rows] == ["vid_en_0001", "vid_en_0002", "vid_ja_0007"]
-    assert rows[0].source_type == "youtube" and rows[0].country == "youtube"
-    assert [c["author"] for c in rows[0].comments] == ["@user0", "@user1", "@user2"]
-    # 댓글은 수집함에 넣는 영상만 가져온다 (할당량 절약)
-    assert sorted(p["videoId"] for path, p in fake.calls if path == "commentThreads") == [
-        "vid_en_0001", "vid_en_0002", "vid_ja_0007"]
-
-
-def test_rerun_replaces_untouched_but_keeps_worked_items(app):
-    app.config.update(PER_SITE_DAILY=3)
-    collector.run_collection(FakeYouTube())
-    worked = CollectedItem.query.filter_by(source_id="vid_ja_0007").one()
-    worked.translate_status = "done"  # 운영자가 번역한 글
-    db.session.commit()
-
-    videos = dict(VIDEOS)
-    videos["vid_pt_0012"] = (9999, "Reagindo à Coreia do Sul", "pt")  # 새로 급상승
-    videos["vid_en_0002"] = (3300, "Why K-pop dominates the charts", "en")
-    run = collector.run_collection(FakeYouTube(videos))
-    ids = {r.source_id for r in CollectedItem.query.all()}
-    # 1위 신규 영상 추가, 손대지 않은 하위 글(vid_en_0002)은 교체, 번역한 글은 유지
-    assert ids == {"vid_pt_0012", "vid_en_0001", "vid_ja_0007"}
-    assert run.added == 1 and run.skipped == 1
-
-
-def test_comment_counts_refresh_for_existing(app):
-    collector.run_collection(FakeYouTube())
-    videos = dict(VIDEOS)
-    videos["vid_en_0003"] = (4321, "Seoul subway tour", "en-US")
-    assert collector.run_collection(FakeYouTube(videos)).added == 0
-    assert CollectedItem.query.filter_by(source_id="vid_en_0003").one().num_comments == 4321
-
-
-def test_no_api_key_means_nothing_collected(app):
-    app.config.update(YOUTUBE_API_KEY="")
-    fake = FakeYouTube()
-    run = collector.run_collection(fake)
-    assert run.added == 0 and fake.calls == []
-    assert "YOUTUBE_API_KEY" in run.errors
-
-
-def test_quota_exceeded_is_reported_once(app):
-    fake = FakeYouTube(quota=True)
-    run = collector.run_collection(fake)
-    assert run.added == 0 and "할당량" in run.errors
-    assert len(fake.calls) == 1 and len(run.errors.splitlines()) == 1  # 첫 요청에서 멈춤
-
-
-def test_kst_midnight():
-    now = datetime(2026, 11, 24, 16, 30, tzinfo=timezone.utc)  # 한국 시간 11/25 01:30
-    assert collector.kst_midnight_utc(now) == datetime(2026, 11, 24, 15, 0)
-
-
-def test_mostly_korean():
-    assert mostly_korean("한국 예능 하이라이트 모음") and not mostly_korean("Foreigners try Korean food")
-    assert mostly_korean("Korea 한국 여행 브이로그 서울 맛집")
+from app.models import CollectedItem
 
 
 @pytest.mark.parametrize("text,cat", [
@@ -180,12 +20,6 @@ def test_mostly_korean():
 ])
 def test_classify(text, cat):
     assert classify(text) == cat
-
-
-def test_cli_collect(app, monkeypatch):
-    monkeypatch.setattr(collector, "_new_session", lambda cfg: FakeYouTube())
-    result = app.test_cli_runner().invoke(args=["collect"])
-    assert result.exit_code == 0 and "YouTube" in result.output
 
 
 # ------------------------------------------------------------------ 번역
@@ -373,106 +207,13 @@ def test_clean_text_keeps_paragraphs():
     assert clean_text(raw) == "First paragraph line. Second paragraph. Next line"
 
 
-# ------------------------------------------------------------------ X(트위터) 수집
-from app.collector import x as xsite  # noqa: E402
-from app.models import SiteState  # noqa: E402
-
-TWEETS = [  # (id, 답글 수, 언어, 본문)
-    ("1001", 340, "en", "Seoul is the cleanest city I've ever visited"),
-    ("1002", 120, "ja", "韓国のコンビニが便利すぎる"),
-    ("1003", 9, "en", "Only nine replies about Korea"),
-    ("1004", 900, "ko", "한국어 트윗은 제외"),
-    ("1005", 55, "es", "Corea del Sur gana el partido"),
-]
-
-
-class FakeX:
-    def __init__(self, status=200):
-        self.calls, self.headers, self.status = [], {}, status
-
-    def get(self, url, params=None, headers=None, timeout=None):
-        assert headers["Authorization"] == "Bearer x-token"
-        self.calls.append(dict(params))
-        if self.status != 200:
-            return FakeResponse({"title": "Too Many Requests", "detail": "Usage cap exceeded"}, self.status)
-        q = params["query"]
-        if q.startswith("conversation_id:"):
-            cid = q.split()[0].split(":")[1]
-            return FakeResponse({
-                "data": [
-                    {"id": f"{cid}r1", "text": "@origin @friend Totally agree", "author_id": "u9",
-                     "public_metrics": {"like_count": 3}},
-                    {"id": f"{cid}r2", "text": "@origin Best trip ever", "author_id": "u8",
-                     "public_metrics": {"like_count": 40}},
-                ],
-                "includes": {"users": [{"id": "u9", "username": "fan9"}, {"id": "u8", "username": "fan8"}]},
-            })
-        return FakeResponse({
-            "data": [{"id": i, "text": text, "lang": lang, "author_id": "u1", "created_at": "2026-11-26T01:00:00Z",
-                      "public_metrics": {"reply_count": n, "like_count": 0},
-                      "attachments": {"media_keys": ["m1"]} if i == "1001" else {}}
-                     for i, n, lang, text in TWEETS],
-            "includes": {"users": [{"id": "u1", "username": "traveler", "name": "Trip Lover"}],
-                         "media": [{"media_key": "m1", "type": "photo", "url": "https://pbs.twimg.com/m1.jpg"}]},
-        })
-
-
-@pytest.fixture
-def x_on(app):
-    app.config.update(YOUTUBE_API_KEY="", X_BEARER_TOKEN="x-token", X_INTERVAL_HOURS=6,
-                      X_SEARCH_MAX_RESULTS=50, X_REPLIES_PER_ITEM=20)
-
-
-def test_x_search_filters_and_sorts(app, x_on):
-    errors = []
-    fake = FakeX()
-    items = xsite.search_candidates(app.config, fake, errors)
-    assert errors == []
-    assert [i.external_id for i in items] == ["1001", "1002", "1005"]  # 답글 9개·한국어 제외, 답글 많은 순
-    first = items[0]
-    assert first.url == "https://x.com/traveler/status/1001" and first.num_comments == 340
-    assert first.source_name == "@traveler (Trip Lover)" and first.image_url == "https://pbs.twimg.com/m1.jpg"
-    params = fake.calls[0]
-    assert params["max_results"] == 50 and "-is:retweet" in params["query"] and "-lang:ko" in params["query"]
-
-
-def test_x_collect_with_replies_and_interval(app, x_on):
-    fake = FakeX()
-    run = collector.run_collection(fake)
-    assert run.added == 3
-    assert all(line.startswith("YouTube") for line in run.errors.splitlines())  # X 쪽 오류 없음
-    row = CollectedItem.query.filter_by(source_id="1001").one()
-    assert row.source_type == "x" and row.country == "x"
-    # 답글: 앞의 @멘션 제거, 좋아요 많은 순
-    assert [(c["author"], c["body"]) for c in row.comments] == [("@fan8", "Best trip ever"), ("@fan9", "Totally agree")]
-    assert fake.calls[1]["max_results"] == 20
-    # X_INTERVAL_HOURS 안에 다시 돌리면 X 는 요청하지 않음 (사용량 절약)
-    fake2 = FakeX()
-    collector.run_collection(fake2)
-    assert fake2.calls == []
-    assert db.session.get(SiteState, "x").last_run_at is not None
-
-
-def test_x_usage_cap_is_reported(app, x_on):
-    run = collector.run_collection(FakeX(status=429))
-    assert run.added == 0 and "사용량 한도" in run.errors
-
-
-def test_x_off_without_token_is_not_an_error(app):
-    app.config.update(X_BEARER_TOKEN="")
-    run = collector.run_collection(FakeYouTube())
-    assert "X" not in run.errors
-
-
-# ------------------------------------------------------------------ Reddit 가져오기 (북마클릿)
-import json as _json  # noqa: E402
-
-
+# ------------------------------------------------------------------ 브라우저에서 가져오기
 def reddit_json(num_comments=42, over_18=False, permalink="/r/korea/comments/abc123/seoul_subway/", is_self=True,
                 url=None):
     post = dict(id="abc123", title="Seoul subway is amazing", subreddit="korea", permalink=permalink,
-                num_comments=num_comments, over_18=over_18, is_self=is_self, selftext="Just visited &amp; loved it",
-                created_utc=1764100000, url=url or "https://www.reddit.com" + permalink,
+                num_comments=num_comments, over_18=over_18, is_self=is_self,
+                selftext="Just visited &amp; loved it.\n\nSecond paragraph", created_utc=1764100000,
+                url=url or "https://www.reddit.com" + permalink,
                 preview={"images": [{"source": {"url": "https://preview.redd.it/x.jpg?a=1&amp;b=2"}}]})
     comments = [
         {"kind": "t1", "data": {"author": "AutoModerator", "body": "rules", "score": 1, "stickied": True}},
@@ -481,43 +222,91 @@ def reddit_json(num_comments=42, over_18=False, permalink="/r/korea/comments/abc
         {"kind": "t1", "data": {"author": "x", "body": "[removed]", "score": 999}},
         {"kind": "more", "data": {}},
     ]
-    return _json.dumps([{"data": {"children": [{"kind": "t3", "data": post}]}},
-                        {"data": {"children": comments}}])
+    return json.dumps([{"data": {"children": [{"kind": "t3", "data": post}]}},
+                       {"data": {"children": comments}}])
 
 
-def test_parse_reddit_json():
-    from app.collector.reddit_import import parse_reddit_json
+def youtube_payload(**kw):
+    d = dict(id="dQw4w9WgXcQ", title="Foreigners try Korean street food", text="We tried 10 foods.\n\nMyeongdong!",
+             author="Example Reacts", published="2026-11-25", num_comments=1234,
+             comments=[{"author": "@a", "body": "looks tasty", "score": 5}, {"author": "@b", "body": "I want to go", "score": 99}])
+    d.update(kw)
+    return json.dumps(d)
 
-    item, external = parse_reddit_json(reddit_json(), 10, 50)
+
+def x_payload(**kw):
+    d = dict(id="1861000000000000001", handle="traveler", name="Trip Lover", text="Seoul is so clean\nLoved it",
+             lang="en", image="https://pbs.twimg.com/media/a.jpg", published="2026-11-25T03:00:00.000Z",
+             num_comments=340, comments=[{"author": "@fan8", "body": "@traveler @friend Best trip", "score": 40},
+                                         {"author": "@fan9", "body": "Agree", "score": 3}])
+    d.update(kw)
+    return json.dumps(d)
+
+
+def test_parse_reddit():
+    item, external = parse("reddit", reddit_json(), 10, 50)
     assert item.url == "https://www.reddit.com/r/korea/comments/abc123/seoul_subway/"
     assert item.source_name == "r/korea" and item.num_comments == 42 and external is None
     assert [c["author"] for c in item.reactions] == ["alice", "bob"]  # 점수순, 자동모더레이터·삭제 제외
-    assert item.summary == "Just visited & loved it"
+    assert item.summary == "Just visited & loved it.\n\nSecond paragraph"  # 문단 유지
     assert item.image_url == "https://preview.redd.it/x.jpg?a=1&b=2"
 
 
-def test_parse_reddit_json_link_post():
-    from app.collector.reddit_import import parse_reddit_json
-
-    _, external = parse_reddit_json(reddit_json(is_self=False, url="https://news.example/korea"), 10, 50)
+def test_parse_reddit_link_post():
+    _, external = parse("reddit", reddit_json(is_self=False, url="https://news.example/korea"), 10, 50)
     assert external == "https://news.example/korea"
 
 
-@pytest.mark.parametrize("payload,message", [
-    (reddit_json(num_comments=5), "수집 기준"),
-    (reddit_json(over_18=True), "NSFW"),
-    (reddit_json(permalink="https://evil.example/"), "주소"),
-    ('{"not": "reddit"}', "형식"),
-    ("", "비어"),
+def test_parse_youtube():
+    item, _ = parse("youtube", youtube_payload(), 10, 50)
+    assert item.url == "https://www.youtube.com/watch?v=dQw4w9WgXcQ" and item.country == "youtube"
+    assert item.image_url == "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg"
+    assert item.num_comments == 1234 and [c["author"] for c in item.reactions] == ["@b", "@a"]
+    assert item.summary == "We tried 10 foods.\n\nMyeongdong!" and item.source_name == "Example Reacts"
+
+
+def test_parse_x_builds_url_and_filters_image():
+    item, _ = parse("x", x_payload(), 10, 50)
+    assert item.url == "https://x.com/traveler/status/1861000000000000001"
+    assert item.source_name == "@traveler (Trip Lover)" and item.lang == "en" and item.num_comments == 340
+    assert item.image_url == "https://pbs.twimg.com/media/a.jpg"
+    assert item.reactions[0]["body"] == "Best trip"  # 답글 앞 @멘션 제거
+    item, _ = parse("x", x_payload(image="https://evil.example/a.jpg"), 10, 50)
+    assert item.image_url is None  # 허용된 이미지 서버만
+
+
+def test_comment_limit_applies():
+    item, _ = parse("youtube", youtube_payload(comments=[{"author": str(i), "body": f"c{i}", "score": i}
+                                                        for i in range(80)]), 10, 50)
+    assert len(item.reactions) == 50 and item.reactions[0]["score"] == 79
+
+
+@pytest.mark.parametrize("site,payload,message", [
+    ("reddit", reddit_json(num_comments=5), "수집 기준"),
+    ("reddit", reddit_json(over_18=True), "NSFW"),
+    ("reddit", reddit_json(permalink="https://evil.example/"), "주소"),
+    ("reddit", '{"not": "reddit"}', "형식"),
+    ("reddit", "", "비어"),
+    ("youtube", youtube_payload(num_comments=3, comments=[{"author": "a", "body": "b", "score": 1}]), "수집 기준"),
+    ("youtube", youtube_payload(id="../../etc"), "영상 ID"),
+    ("youtube", youtube_payload(comments=[]), "댓글을 하나도"),
+    ("x", x_payload(handle="evil.com/x"), "주소"),
+    ("x", x_payload(text=""), "본문"),
+    ("x", "[1,2]", "형식"),
 ])
-def test_parse_reddit_json_rejects(payload, message):
-    from app.collector.reddit_import import RedditImportError, parse_reddit_json
-
-    with pytest.raises(RedditImportError, match=message):
-        parse_reddit_json(payload, 10, 50)
+def test_parse_rejects(site, payload, message):
+    with pytest.raises(ImportError_, match=message):
+        parse(site, payload, 10, 50)
 
 
-def _staff_client(app, client, role="operator"):
+def test_detect_pasted_content():
+    assert detect(json.dumps({"site": "x", "json": x_payload()}))[0] == "x"
+    assert detect(reddit_json())[0] == "reddit"
+    with pytest.raises(ImportError_):
+        detect('{"hello": 1}')
+
+
+def _staff_client(client, role="operator"):
     from app.models import User
 
     u = User(username=role, email=f"{role}@example.com", role=role)
@@ -528,23 +317,59 @@ def _staff_client(app, client, role="operator"):
     return client
 
 
-def test_import_reddit_route(app, client):
-    _staff_client(app, client)
-    html = client.get("/desk/import/reddit").get_data(as_text=True)
+def test_import_page_and_bookmarklet(app, client):
+    _staff_client(client)
+    html = client.get("/desk/import").get_data(as_text=True)
     assert 'href="javascript:' in html and "BestKorea로 가져오기" in html
-    r = client.post("/desk/import/reddit", data={"payload": reddit_json()})
+    assert client.get("/desk/import/reddit").status_code == 200  # 예전 버튼 주소 호환
+
+
+@pytest.mark.parametrize("site,payload", [
+    ("reddit", reddit_json()), ("youtube", youtube_payload()), ("x", x_payload()),
+])
+def test_import_each_site(app, client, site, payload):
+    _staff_client(client)
+    r = client.post("/desk/import", data={"site": site, "payload": payload})
     item = CollectedItem.query.one()
     assert r.headers["Location"].endswith(f"/desk/{item.id}")
-    assert item.source_type == "reddit" and item.status == "new" and len(item.comments) == 2
+    assert item.source_type == site and item.status == "new" and len(item.comments) == 2
     # 같은 글을 다시 가져오면 기존 글로 이동
-    r = client.post("/desk/import/reddit", data={"payload": reddit_json()})
+    r = client.post("/desk/import", data={"site": site, "payload": payload})
     assert CollectedItem.query.count() == 1 and r.headers["Location"].endswith(f"/desk/{item.id}")
-    # 기준 미달은 거절
-    client.post("/desk/import/reddit", data={"payload": reddit_json(num_comments=3, permalink="/r/korea/comments/zz9/x/")})
-    assert CollectedItem.query.count() == 1
 
 
-def test_import_reddit_staff_only(app, client):
-    _staff_client(app, client, role="reporter")
-    assert client.get("/desk/import/reddit").status_code == 403
-    assert client.post("/desk/import/reddit", data={"payload": reddit_json()}).status_code == 403
+def test_import_pasted_without_site(app, client):
+    _staff_client(client)
+    client.post("/desk/import", data={"payload": json.dumps({"site": "youtube", "json": youtube_payload()})})
+    assert CollectedItem.query.one().source_type == "youtube"
+
+
+def test_import_rejected_payload_is_not_saved(app, client):
+    _staff_client(client)
+    r = client.post("/desk/import", data={"site": "x", "payload": x_payload(num_comments=2, comments=[])},
+                    follow_redirects=True)
+    assert CollectedItem.query.count() == 0 and "수집 기준" in r.get_data(as_text=True)
+
+
+def test_import_staff_only(app, client):
+    _staff_client(client, role="reporter")
+    assert client.get("/desk/import").status_code == 403
+    assert client.post("/desk/import", data={"site": "reddit", "payload": reddit_json()}).status_code == 403
+
+
+def test_bookmarklet_script_is_valid_js(app, client, tmp_path):
+    """북마클릿 코드를 한 줄로 만든 결과가 문법적으로 올바른지 node 로 확인."""
+    import shutil
+    import subprocess
+    from urllib.parse import unquote
+
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node 없음")
+    _staff_client(client)
+    html = client.get("/desk/import").get_data(as_text=True)
+    href = html.split('href="javascript:', 1)[1].split('"', 1)[0]
+    js = tmp_path / "b.js"
+    js.write_text(unquote(href.replace("&amp;", "&")))
+    out = subprocess.run([node, "--check", str(js)], capture_output=True, text=True)
+    assert out.returncode == 0, out.stderr

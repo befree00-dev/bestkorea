@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}브라우저에서 가져오기{% endblock %}
+{% block sidebar %}{% endblock %}
+
+{%- set grabber -%}{% include "desk/_grabber.js" %}{%- endset %}
+
+{% block content %}
+<div class="box">
+  <h1>브라우저에서 가져오기</h1>
+  <p class="muted">Reddit · YouTube · X 게시물을 운영자 브라우저에서 골라 수집함으로 보냅니다 (BestKorea 서버는 각 사이트에 접속하지 않습니다).
+    댓글 {{ cfg.MIN_COMMENTS }}개 이상인 글만 받으며, 인기 댓글 최대 {{ cfg.COMMENTS_PER_ITEM }}개를 함께 저장합니다.</p>
+
+  <div id="auto-status" class="notice" hidden></div>
+
+  <h2>1. 가져오기 버튼 등록 (처음 한 번)</h2>
+  <p>아래 버튼을 브라우저 <strong>즐겨찾기(북마크) 막대로 끌어다 놓으세요.</strong>
+     즐겨찾기 막대가 안 보이면 Chrome·Edge는 <code>⌘+Shift+B</code>(윈도우 <code>Ctrl+Shift+B</code>), Safari는 보기 메뉴 → 즐겨찾기 막대 보기.
+     예전에 등록한 Reddit 전용 버튼은 지우고 이 버튼으로 바꿔 주세요.</p>
+  <p><a class="btn btn-primary bookmarklet" href="javascript:{{ grabber|replace('\n', ' ')|urlencode }}"
+        onclick="alert('이 버튼은 여기서 누르는 게 아니라 즐겨찾기 막대로 끌어다 놓는 것입니다.'); return false;">BestKorea로 가져오기</a></p>
+  <p class="small muted">이 버튼에는 이 사이트 주소({{ origin }})가 들어 있습니다. 사이트 주소가 바뀌면 다시 등록하세요.</p>
+
+  <h2>2. 사용법</h2>
+  <table class="table">
+    <thead><tr><th>사이트</th><th>어디서 누르나</th><th>참고</th></tr></thead>
+    <tbody>
+      <tr><td>Reddit</td><td>게시글 페이지 (reddit.com/r/…/comments/…)</td><td>바로 가져옵니다</td></tr>
+      <tr><td>YouTube</td><td>영상 페이지 (youtube.com/watch?v=…)</td><td>댓글을 불러오려고 화면이 자동으로 내려갑니다 (최대 20초). 쇼츠는 지원하지 않습니다</td></tr>
+      <tr><td>X</td><td>게시물 페이지 (x.com/아이디/status/…)</td><td>로그인해야 답글이 보입니다. 답글을 불러오려고 화면이 자동으로 내려갑니다 (최대 20초)</td></tr>
+    </tbody>
+  </table>
+  <p>버튼을 누르면 새 탭에서 이 페이지가 열리고, 데이터를 다 읽으면 수집함에 자동으로 추가됩니다.
+     팝업이 차단되면 이 사이트의 팝업을 허용하세요. 읽는 동안 원래 페이지 오른쪽 위에 진행 상황이 표시됩니다.</p>
+</div>
+
+<div class="box">
+  <h2>자동으로 안 될 때: 붙여넣기</h2>
+  <p class="muted small">새 탭으로 전달이 안 되면 원래 페이지 오른쪽 위에 <strong>데이터 복사</strong> 버튼이 나타납니다. 누른 뒤 아래 칸에 붙여넣기(⌘V) 하고 추가를 누르세요.
+    Reddit은 글 주소 끝에 <code>.json</code>을 붙여 연 뒤 전체 내용을 복사해 붙여넣어도 됩니다.</p>
+  <form method="post" id="import-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="site" id="site" value="">
+    <textarea name="payload" id="payload" rows="6" placeholder="복사한 데이터 붙여넣기" required></textarea>
+    <div class="actions" style="justify-content:flex-start"><button class="btn btn-primary">수집함에 추가</button></div>
+  </form>
+</div>
+
+<script>
+  (function () {
+    var form = document.getElementById("import-form"), box = document.getElementById("payload"),
+        siteInput = document.getElementById("site"), status = document.getElementById("auto-status"), done = false;
+    var ORIGINS = {
+      reddit: /^https:\/\/([a-z]+\.)?reddit\.com$/,
+      youtube: /^https:\/\/(www\.|m\.)?youtube\.com$/,
+      x: /^https:\/\/(www\.)?(x|twitter)\.com$/
+    };
+    function show(text) { status.hidden = false; status.textContent = text; }
+    window.addEventListener("message", function (e) {
+      var d = e.data;
+      if (done || !d || typeof d.json !== "string") return;
+      /* 예전 Reddit 전용 버튼 호환 */
+      var site = d.type === "bestkorea-reddit" ? "reddit" : (d.type === "bestkorea-import" ? d.site : null);
+      if (!site || !ORIGINS[site] || !ORIGINS[site].test(e.origin)) return;
+      done = true;
+      siteInput.value = site;
+      box.value = d.json;
+      show("받았습니다. 수집함에 추가하는 중…");
+      form.submit();
+    });
+    var fromButton = new URLSearchParams(location.search).get("from") === "bookmarklet";
+    if (fromButton && window.opener) {
+      show("원래 탭에서 데이터를 읽는 중입니다. YouTube·X는 댓글을 불러오느라 20초 정도 걸릴 수 있습니다…");
+      try { window.opener.postMessage("bestkorea-ready", "*"); } catch (e) {}
+      setTimeout(function () {
+        if (!done) show("아직 데이터가 오지 않았습니다. 원래 탭 오른쪽 위에 '데이터 복사' 버튼이 보이면 눌러서 아래 칸에 붙여넣으세요.");
+      }, 30000);
+    } else if (fromButton) {
+      show("원래 탭과 연결되지 않았습니다. 원래 탭 오른쪽 위의 '데이터 복사' 버튼을 눌러 아래 칸에 붙여넣으세요.");
+    }
+  })();
+</script>
+{% endblock %}

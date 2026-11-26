@@ -28,7 +28,7 @@ def staff_required(f):
 @bp.route("/")
 @staff_required
 def index():
-    from .collector import SITES, site_status, today_counts
+    from .collector import SITE_NAMES
 
     status = request.args.get("status", "new")
     query = CollectedItem.query
@@ -56,7 +56,7 @@ def index():
     counts = {s: CollectedItem.query.filter_by(status=s).count() for s in STATUSES}
     return render_template(
         "desk/list.html", pagination=pagination, status=status, counts=counts, STATUSES=STATUSES,
-        sites=site_status(current_app.config), SITES=SITES, today=today_counts(),
+        SITE_NAMES=SITE_NAMES,
     )
 
 
@@ -99,30 +99,30 @@ def visibility(item_id):
     return redirect(request.referrer or url_for("desk.index"))
 
 
-# ------------------------------------------------------------------ Reddit 가져오기 (운영자 브라우저 → 수집함)
-@bp.route("/import/reddit", methods=["GET", "POST"])
+# ------------------------------------------------------------------ 브라우저에서 가져오기 (운영자 브라우저 → 수집함)
+@bp.route("/import", methods=["GET", "POST"])
+@bp.route("/import/reddit", methods=["GET", "POST"])  # 예전에 등록한 Reddit 전용 버튼 호환
 @staff_required
-def import_reddit():
-    from .collector import _save
-    from .collector.reddit_import import RedditImportError, parse_reddit_json
+def import_page():
+    from .collector import SITE_NAMES, save_item
+    from .collector.browser_import import ImportError_, detect, parse
 
     if request.method == "POST":
         cfg = current_app.config
         try:
-            item, external = parse_reddit_json(request.form.get("payload", ""), cfg["MIN_COMMENTS"],
-                                               cfg["COMMENTS_PER_ITEM"])
-        except RedditImportError as exc:
+            site, payload = request.form.get("site"), request.form.get("payload", "")
+            if site not in SITE_NAMES:  # 붙여넣기: 내용으로 사이트 판별
+                site, payload = detect(payload)
+            item, article_url = parse(site, payload, cfg["MIN_COMMENTS"], cfg["COMMENTS_PER_ITEM"])
+        except ImportError_ as exc:
             flash(str(exc), "danger")
-            return redirect(url_for("desk.import_reddit"))
-        existing = CollectedItem.query.filter_by(url=item.url).first()
-        if existing:
+            return redirect(url_for("desk.import_page"))
+        row, created = save_item(item, article_url)
+        if created:
+            flash(f"{SITE_NAMES[site]} 글을 수집함에 추가했습니다 (댓글 {len(item.reactions)}개). 번역을 눌러 보세요.",
+                  "success")
+        else:
             flash("이미 수집함에 있는 글입니다.", "info")
-            return redirect(url_for("desk.item", item_id=existing.id))
-        row = _save(item)
-        row.article_url = external[:2000] if external else None
-        db.session.commit()
-        flash(f"수집함에 추가했습니다 (댓글 {len(item.reactions)}개). 번역을 눌러 보세요.", "success")
         return redirect(url_for("desk.item", item_id=row.id))
 
-    origin = request.host_url.rstrip("/")
-    return render_template("desk/import_reddit.html", origin=origin)
+    return render_template("desk/import.html", origin=request.host_url.rstrip("/"))
