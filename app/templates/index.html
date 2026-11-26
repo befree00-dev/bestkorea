@@ -17,20 +17,22 @@
 
 {{ ad(cfg.ADSENSE_SLOT_IN_FEED, 'auto', 'ad-infeed') }}
 
-<div class="grid-2 community-grid">
-  {% for slug in COMMUNITY_BOARDS %}
-  <section class="box">
-    <div class="box-head"><h2>{{ BOARDS[slug][0] }}</h2><a href="{{ url_for('main.board_list', board=slug) }}">더보기 ›</a></div>
-    <ul class="mini-list">
-      {% for p in by_board[slug] %}
-        <li><a href="{{ url_for('main.post_detail', board=p.board, post_id=p.id) }}">{{ p.title }}
-          {% if p.comment_count %}<span class="cnt">[{{ p.comment_count }}]</span>{% endif %}</a>
-          <time>{{ p.created_at|timeago }}</time></li>
-      {% else %}<li class="empty">첫 글을 기다리고 있어요.</li>{% endfor %}
-    </ul>
-  </section>
-  {% endfor %}
-</div>
+{% for slug in COMMUNITY_BOARDS %}
+<section class="box">
+  <div class="box-head"><h2>{{ BOARDS[slug][0] }}</h2><a href="{{ url_for('main.board_list', board=slug) }}">더보기 ›</a></div>
+  <div class="topic-links">
+    {% for code, name in COMMUNITY_TOPICS.items() %}<a href="{{ url_for('main.board_list', board=slug, topic=code) }}">{{ name }}</a>{% endfor %}
+  </div>
+  <ul class="mini-list two-col">
+    {% for p in by_board[slug] %}
+      <li><a href="{{ url_for('main.post_detail', board=p.board, post_id=p.id) }}">
+        {% if p.topic %}<span class="topic tp-{{ p.topic }}">{{ topic_name(p.topic) }}</span>{% endif %}{{ p.title }}
+        {% if p.comment_count %}<span class="cnt">[{{ p.comment_count }}]</span>{% endif %}</a>
+        <time>{{ p.created_at|timeago }}</time></li>
+    {% else %}<li class="empty">첫 글을 기다리고 있어요.</li>{% endfor %}
+  </ul>
+</section>
+{% endfor %}
 {% endblock %}
 
 {% block sidebar %}

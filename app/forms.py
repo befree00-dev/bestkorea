@@ -4,7 +4,7 @@ from flask_wtf import FlaskForm
 from wtforms import BooleanField, HiddenField, PasswordField, SelectField, StringField, TextAreaField, URLField
 from wtforms.validators import DataRequired, Email, EqualTo, Length, Optional, URL, ValidationError
 
-from .constants import COUNTRIES
+from .constants import COMMUNITY_TOPICS, COUNTRIES, DEFAULT_TOPIC
 from .models import User
 
 
@@ -36,6 +36,8 @@ class LoginForm(FlaskForm):
 
 class PostForm(FlaskForm):
     board = SelectField("게시판", choices=[])  # 등급에 따라 뷰에서 채움
+    # 커뮤니티 게시판용 분류. 해외 반응 글에는 쓰지 않으므로 값이 없어도 통과시키고 저장할 때 정리한다
+    topic = SelectField("분류", choices=list(COMMUNITY_TOPICS.items()), default=DEFAULT_TOPIC, validate_choice=False)
     title = StringField("제목", validators=[DataRequired(), Length(2, 200)])
     body = TextAreaField("내용", validators=[DataRequired(), Length(2, 100000)])  # 본문 전체 번역도 들어갈 수 있게
     source_url = URLField("원문 링크", validators=[Optional(), URL(), Length(max=2000)])

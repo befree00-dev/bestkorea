@@ -8,6 +8,7 @@
 {% block content %}
 <article class="box article">
   <div class="crumbs"><a href="{{ url_for('main.board_list', board=post.board) }}">{{ board_name(post.board) }}</a>
+    {% if post.topic %} · <a href="{{ url_for('main.board_list', board=post.board, topic=post.topic) }}">{{ topic_name(post.topic) }}</a>{% endif %}
     {% if post.country in COUNTRIES %} · <a href="{{ url_for('main.news', country=post.country) }}">{{ country_label(post.country) }}</a>{% endif %}</div>
   <h1>{{ post.title }}</h1>
   {% if post.original_title %}<p class="original-title" lang="{{ post.lang or '' }}">원제: {{ post.original_title }}</p>{% endif %}

@@ -282,3 +282,19 @@ fieldset[hidden] { display: none; }
 .body-preview { margin-bottom: 14px; }
 .body-image { margin: 14px 0; }
 .body-image img { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0 auto; }
+
+/* 커뮤니티 분류 */
+.topic { display: inline-block; font-size: 12px; font-weight: 700; line-height: 1; padding: 4px 7px; border-radius: 5px; margin-right: 6px;
+  vertical-align: 2px; white-space: nowrap; color: var(--tp, var(--muted)); background: color-mix(in srgb, var(--tp, var(--muted)) 13%, transparent); }
+.tp-humor { --tp: #d97706; } .tp-chat { --tp: #5b6475; } .tp-politics { --tp: #2f5bd3; } .tp-economy { --tp: #0f8a5f; }
+.tp-history { --tp: #8a5a2b; } .tp-entertainment { --tp: #c0368c; } .tp-etc { --tp: #6b7385; }
+@media (prefers-color-scheme: dark) {
+  .tp-humor { --tp: #fbbf24; } .tp-chat { --tp: #a3abbd; } .tp-politics { --tp: #7fa0ff; } .tp-economy { --tp: #4ccf98; }
+  .tp-history { --tp: #e0aa72; } .tp-entertainment { --tp: #f07cc2; } .tp-etc { --tp: #a3abbd; }
+}
+.topic-links { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 13px; margin: -4px 0 8px; }
+.topic-links a { color: var(--muted); }
+.topic-links a:hover { color: var(--brand); }
+.mini-list.two-col { columns: 2; column-gap: 24px; }
+.mini-list.two-col li { break-inside: avoid; }
+@media (max-width: 600px) { .mini-list.two-col { columns: 1; } }

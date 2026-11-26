@@ -88,8 +88,8 @@ def test_body_images_render_safely(client, user):
         "문장 중간 ![이미지](/uploads/x.png) 은 그대로 글자",
         "<img src=x onerror=alert(1)>",
     ])
-    p = make_post(board="free", body=body, user_id=user.id)
-    html = client.get(f"/b/free/{p.id}").get_data(as_text=True)
+    p = make_post(board="community", body=body, user_id=user.id)
+    html = client.get(f"/b/community/{p.id}").get_data(as_text=True)
     assert '<img src="/uploads/abc123.png" alt="서울 사진"' in html
     assert '<img src="https://i.ytimg.com/vi/x/hqdefault.jpg"' in html
     assert 'src="javascript:' not in html and "onerror=alert(1)>" not in html
@@ -110,5 +110,5 @@ def test_write_form_has_image_tools(client):
     login(client, "r@example.com")
     html = client.get("/write").get_data(as_text=True)
     assert 'id="img-btn"' in html and 'id="preview-btn"' in html and "/upload/image" in html
-    client.post("/write", data=dict(board="free", title="사진 글", body="사진\n![](/uploads/abc.png)"))
+    client.post("/write", data=dict(board="community", topic="chat", title="사진 글", body="사진\n![](/uploads/abc.png)"))
     assert "![](/uploads/abc.png)" in Post.query.one().body

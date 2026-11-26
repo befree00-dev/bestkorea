@@ -15,7 +15,7 @@ def make_user(username, role="member", email=None):
 
 
 def make_post(**kw):
-    p = Post(board=kw.pop("board", "free"), title=kw.pop("title", "hello"), body=kw.pop("body", "body"), **kw)
+    p = Post(board=kw.pop("board", "community"), title=kw.pop("title", "hello"), body=kw.pop("body", "body"), **kw)
     db.session.add(p)
     db.session.commit()
     return p
@@ -71,15 +71,15 @@ def test_board_permissions_by_role(client, role, news_ok):
     if not news_ok:
         assert r.status_code == 200  # 선택지에 없는 게시판 → 폼 오류
     # 커뮤니티 게시판은 모든 등급 가능
-    client.post("/write", data=dict(board="humor", title="웃긴 글", body="ㅋㅋ"))
-    assert Post.query.filter_by(board="humor").count() == 1
+    client.post("/write", data=dict(board="community", topic="humor", title="웃긴 글", body="ㅋㅋ"))
+    assert Post.query.filter_by(board="community", topic="humor").count() == 1
 
 
 def test_member_write_form_hides_news_boards(client):
     make_user("m")
     login(client, "m@example.com")
     html = client.get("/write").get_data(as_text=True)
-    assert 'value="humor"' in html and 'value="politics"' not in html
+    assert 'value="community"' in html and '<option value="politics">' not in html.split('id="topic"')[0]
     assert "해외 반응 글 정보" not in html
     # 해외 반응 게시판 목록에는 글쓰기 대신 기자 지원 버튼
     assert "기자 지원하기" in client.get("/b/politics").get_data(as_text=True)
@@ -232,7 +232,7 @@ def test_reporter_cannot_use_desk_item(client):
 # ------------------------------------------------------------------ 보안·기타
 def test_user_html_is_escaped_and_links_autolinked(client, user):
     p = make_post(body='<script>alert(1)</script> see https://example.com/a?b=1&c=2', user_id=user.id)
-    html = client.get(f"/b/free/{p.id}").get_data(as_text=True)
+    html = client.get(f"/b/community/{p.id}").get_data(as_text=True)
     assert "<script>alert(1)</script>" not in html and "&lt;script&gt;" in html
     assert 'href="https://example.com/a?b=1&amp;c=2"' in html
 
@@ -390,6 +390,60 @@ def test_member_cannot_add_reactions_to_community_post(client):
     make_user("m")
     login(client, "m@example.com")
     assert "현지 반응 (댓글)" not in client.get("/write").get_data(as_text=True)
-    client.post("/write", data=dict(board="free", title="자유글", body="내용",
+    client.post("/write", data=dict(board="community", topic="chat", title="자유글", body="내용",
                                     **reaction_fields([("", "x", "몰래 넣은 반응", 1)])))
     assert Post.query.one().reactions == [] and Reaction.query.count() == 0
+
+
+def test_community_board_with_topics(client):
+    make_user("m")
+    login(client, "m@example.com")
+    html = client.get("/write?board=community&topic=history").get_data(as_text=True)
+    assert '<option selected value="history">역사</option>' in html or 'value="history" selected' in html
+    for topic, title in [("humor", "웃긴 짤"), ("history", "조선 역사 이야기"), ("politics", "정치 잡담")]:
+        client.post("/write", data=dict(board="community", topic=topic, title=title, body="내용"))
+    assert {p.topic for p in Post.query.all()} == {"humor", "history", "politics"}
+    all_html = client.get("/b/community").get_data(as_text=True)
+    assert all(t in all_html for t in ["웃긴 짤", "조선 역사 이야기", "정치 잡담"])
+    assert '<span class="topic tp-history">역사</span>' in all_html
+    only = client.get("/b/community?topic=history").get_data(as_text=True)
+    assert "조선 역사 이야기" in only and "웃긴 짤" not in only
+    # 해외 반응 글에는 분류가 저장되지 않음
+    p = Post.query.filter_by(title="웃긴 짤").one()
+    assert client.get(f"/b/community/{p.id}").status_code == 200
+
+
+def test_old_board_urls_redirect(client, user):
+    p = make_post(board="community", topic="humor", title="예전 유머글", user_id=user.id)
+    r = client.get("/b/humor")
+    assert r.status_code == 301 and r.headers["Location"].endswith("/b/community?topic=humor")
+    r = client.get(f"/b/free/{p.id}")
+    assert r.status_code == 301 and r.headers["Location"].endswith(f"/b/community/{p.id}")
+
+
+def test_upgrade_merges_old_boards_and_adds_column(app):
+    """예전 DB(topic 칸 없음, 유머·자유게시판 글)를 흉내 내 업그레이드."""
+    from sqlalchemy import text
+
+    from app.upgrade import upgrade_data
+
+    if db.engine.dialect.name == "sqlite":
+        db.session.execute(text("DROP INDEX IF EXISTS ix_post_topic"))
+        db.session.execute(text("ALTER TABLE post DROP COLUMN topic"))
+    else:
+        db.session.execute(text("ALTER TABLE post DROP COLUMN topic"))
+    db.session.execute(text(
+        "INSERT INTO post (board, title, body, views, like_count, comment_count, created_at) VALUES "
+        "('humor', '웃긴 글', 'b', 0, 0, 0, CURRENT_TIMESTAMP), ('free', '자유 글', 'b', 0, 0, 0, CURRENT_TIMESTAMP)"))
+    db.session.commit()
+    upgrade_data()
+    upgrade_data()  # 두 번 실행해도 안전
+    rows = db.session.execute(text("SELECT title, board, topic FROM post ORDER BY title")).all()
+    assert [tuple(r) for r in rows] == [("웃긴 글", "community", "humor"), ("자유 글", "community", "chat")]
+
+
+def test_invalid_topic_falls_back_to_chat(client):
+    make_user("m")
+    login(client, "m@example.com")
+    client.post("/write", data=dict(board="community", topic="<script>", title="분류 이상", body="내용"))
+    assert Post.query.one().topic == "chat"

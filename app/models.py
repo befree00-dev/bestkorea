@@ -67,6 +67,7 @@ class ReporterApplication(db.Model):
 class Post(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     board = db.Column(db.String(30), nullable=False, index=True)
+    topic = db.Column(db.String(20), index=True)  # 커뮤니티 게시판 분류 (유머·잡담·정치·…)
     title = db.Column(db.String(300), nullable=False)
     body = db.Column(db.Text, default="", nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=True)

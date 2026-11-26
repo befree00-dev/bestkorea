@@ -25,6 +25,7 @@
   <form method="post" id="post-form">
     {{ form.hidden_tag() }}
     {{ field(form.board) }}
+    <div class="community-only">{{ field(form.topic) }}</div>
     {{ field(form.title, maxlength=200) }}
     {{ field(form.body, rows=14, hint='HTML은 사용할 수 없으며, 링크는 자동으로 연결됩니다. 이미지는 ![](주소) 한 줄로 들어가고 게시글에서 그림으로 보입니다.') }}
     {% include "partials/body_editor.html" %}
@@ -44,17 +45,16 @@
     </div>
   </form>
 </div>
-{% if current_user.can_write_news %}
 <script>
   (function () {
     var newsBoards = {{ NEWS_BOARDS|tojson }};
-    var select = document.getElementById('board'), boxes = document.querySelectorAll('.news-only');
+    var select = document.getElementById('board');
     function sync() {
-      var off = newsBoards.indexOf(select.value) === -1;
-      boxes.forEach(function (b) { b.hidden = off; });
+      var isNews = newsBoards.indexOf(select.value) !== -1;
+      document.querySelectorAll('.news-only').forEach(function (b) { b.hidden = !isNews; });
+      document.querySelectorAll('.community-only').forEach(function (b) { b.hidden = isNews; });
     }
     select.addEventListener('change', sync); sync();
   })();
 </script>
-{% endif %}
 {% endblock %}

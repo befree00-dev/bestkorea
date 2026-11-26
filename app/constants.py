@@ -14,13 +14,29 @@ BOARDS = OrderedDict(
         ("it", ("IT", "news", "한국 IT·테크·반도체·스마트폰·AI 관련 해외 반응")),
         ("society", ("사회", "news", "한국 사회·생활·문화·교육·사건 사고에 대한 해외 반응")),
         ("fun", ("기타", "news", "밈·유머·여행·음식 등 그 밖의 한국 관련 해외 화제")),
-        ("humor", ("유머게시판", "community", "웃긴 글, 짤, 썰을 자유롭게")),
-        ("free", ("자유게시판", "community", "무엇이든 자유롭게 이야기하세요")),
+        ("community", ("커뮤니티", "community", "유머·잡담·정치·경제·역사·연예 등 무엇이든 자유롭게 이야기하세요")),
     ]
 )
 
 NEWS_BOARDS = [k for k, v in BOARDS.items() if v[1] == "news"]
 COMMUNITY_BOARDS = [k for k, v in BOARDS.items() if v[1] == "community"]
+
+# 커뮤니티 게시판 글 분류 (글쓰기에서 선택)
+COMMUNITY_TOPICS = OrderedDict(
+    [
+        ("humor", "유머"),
+        ("chat", "잡담"),
+        ("politics", "정치"),
+        ("economy", "경제"),
+        ("history", "역사"),
+        ("entertainment", "연예"),
+        ("etc", "기타"),
+    ]
+)
+DEFAULT_TOPIC = "chat"
+
+# 예전 게시판 → (새 게시판, 분류). 서버 시작 시 기존 글에 적용하고, 예전 주소는 새 주소로 연결
+LEGACY_BOARD_MAP = {"humor": ("community", "humor"), "free": ("community", "chat")}
 
 # 출처 지역 code -> (이름, 표시 아이콘)
 COUNTRIES = OrderedDict(
@@ -54,6 +70,10 @@ def region_for_lang(lang):
 
 def board_name(slug):
     return BOARDS.get(slug, (slug,))[0]
+
+
+def topic_name(code):
+    return COMMUNITY_TOPICS.get(code, "")
 
 
 def country_label(code):

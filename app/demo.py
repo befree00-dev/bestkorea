@@ -5,7 +5,7 @@
 """
 from datetime import timedelta
 
-from .constants import COMMUNITY_BOARDS, NEWS_BOARDS, ROLE_MEMBER, ROLE_OPERATOR, ROLE_REPORTER
+from .constants import COMMUNITY_BOARDS, COMMUNITY_TOPICS, NEWS_BOARDS, ROLE_MEMBER, ROLE_OPERATOR, ROLE_REPORTER
 from .extensions import db
 from .models import CollectedItem, Comment, Post, Reaction, User, utcnow
 
@@ -63,10 +63,10 @@ def seed():
 
     # 커뮤니티 게시글 (일반 회원)
     for board in COMMUNITY_BOARDS:
-        for i in range(3):
-            post = Post(board=board, title=f"[샘플] {board} 게시판 테스트 글 {i + 1}",
+        for i, (topic, topic_label) in enumerate(COMMUNITY_TOPICS.items()):
+            post = Post(board=board, topic=topic, title=f"[샘플] {topic_label} 글 예시 {i + 1}",
                         body="회원이 작성한 글 예시입니다.\n줄바꿈도 표시됩니다.", user_id=member.id,
-                        created_at=now - timedelta(hours=i * 5))
+                        created_at=now - timedelta(hours=i * 3))
             db.session.add(post)
             db.session.flush()
             db.session.add(Comment(post_id=post.id, user_id=reporter.id, body="샘플 댓글입니다."))

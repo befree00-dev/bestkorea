@@ -10,7 +10,7 @@
   </div>
   {% if board %}
     {% if can_write_board(current_user, board) %}
-      <a class="btn btn-primary" href="{{ url_for('main.write', board=board) }}">글쓰기</a>
+      <a class="btn btn-primary" href="{{ url_for('main.write', board=board, topic=request.args.get('topic')) }}">글쓰기</a>
     {% elif BOARDS[board][1] == 'news' %}
       {% if not current_user.is_authenticated or current_user.role == 'member' %}
       <a class="btn" href="{{ url_for('main.reporter_apply') }}" title="해외 반응 글은 기자·운영자가 작성합니다">기자 지원하기</a>
@@ -26,6 +26,14 @@
   <a class="chip {{ 'active' if not request.args.get('country') }}" href="{{ url_with(country=None, page=None) }}">전체 지역</a>
   {% for code, (name, flag) in COUNTRIES.items() %}
     <a class="chip {{ 'active' if request.args.get('country') == code }}" href="{{ url_with(country=code, page=None) }}">{{ flag }} {{ name }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if board and BOARDS[board][1] == 'community' %}
+<div class="chips">
+  <a class="chip {{ 'active' if not request.args.get('topic') }}" href="{{ url_with(topic=None, page=None) }}">전체</a>
+  {% for code, name in COMMUNITY_TOPICS.items() %}
+    <a class="chip {{ 'active' if request.args.get('topic') == code }}" href="{{ url_with(topic=code, page=None) }}">{{ name }}</a>
   {% endfor %}
 </div>
 {% endif %}

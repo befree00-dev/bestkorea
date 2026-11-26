@@ -9,7 +9,8 @@ from markupsafe import Markup, escape
 from config import Config
 
 from .constants import (
-    BOARDS, COMMUNITY_BOARDS, COUNTRIES, NEWS_BOARDS, board_name, can_write_board, country_flag, country_label,
+    BOARDS, COMMUNITY_BOARDS, COMMUNITY_TOPICS, COUNTRIES, NEWS_BOARDS, board_name, can_write_board, country_flag,
+    country_label, topic_name,
 )
 from .extensions import csrf, db, login_manager
 
@@ -75,6 +76,8 @@ def _register_template_helpers(app):
             BOARDS=BOARDS,
             NEWS_BOARDS=NEWS_BOARDS,
             COMMUNITY_BOARDS=COMMUNITY_BOARDS,
+            COMMUNITY_TOPICS=COMMUNITY_TOPICS,
+            topic_name=topic_name,
             COUNTRIES=COUNTRIES,
             board_name=board_name,
             country_label=country_label,

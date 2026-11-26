@@ -4,7 +4,10 @@ from flask import Blueprint, Response, abort, current_app, flash, redirect, rend
 from flask_login import current_user, login_required
 from sqlalchemy import or_
 
-from .constants import BOARDS, COMMUNITY_BOARDS, COUNTRIES, NEWS_BOARDS, ROLE_MEMBER, can_write_board
+from .constants import (
+    BOARDS, COMMUNITY_BOARDS, COMMUNITY_TOPICS, COUNTRIES, DEFAULT_TOPIC, LEGACY_BOARD_MAP, NEWS_BOARDS, ROLE_MEMBER,
+    can_write_board,
+)
 from .extensions import db
 from .forms import CommentForm, PostForm, ReporterApplyForm
 from .models import CollectedItem, Comment, Like, Post, Reaction, ReporterApplication, utcnow
@@ -43,7 +46,7 @@ def index():
         Post.query.filter(Post.board.in_(NEWS_BOARDS)).order_by(Post.created_at.desc()).limit(20).all()
     )
     by_board = {
-        slug: Post.query.filter_by(board=slug).order_by(Post.created_at.desc()).limit(8).all()
+        slug: Post.query.filter_by(board=slug).order_by(Post.created_at.desc()).limit(16).all()
         for slug in COMMUNITY_BOARDS
     }
     week = utcnow() - timedelta(days=7)
@@ -76,8 +79,14 @@ def search():
 
 @bp.route("/b/<board>")
 def board_list(board):
+    if board in LEGACY_BOARD_MAP:  # 예전 유머게시판·자유게시판 주소
+        new_board, topic = LEGACY_BOARD_MAP[board]
+        return redirect(url_for("main.board_list", board=new_board, topic=topic), 301)
     _get_board_or_404(board)
     query = _apply_filters(Post.query.filter_by(board=board))
+    topic = request.args.get("topic")
+    if BOARDS[board][1] == "community" and topic in COMMUNITY_TOPICS:
+        query = query.filter(Post.topic == topic)
     sort = request.args.get("sort")
     order = Post.like_count.desc() if sort == "best" else Post.created_at.desc()
     pagination = _paginate(query.order_by(order, Post.id.desc()))
@@ -139,6 +148,13 @@ def _collected_item_for(form_value):
     if item is None:
         abort(404)
     return item
+
+
+def _save_topic(post, form):
+    if BOARDS[post.board][1] != "community":
+        post.topic = None
+    else:
+        post.topic = form.topic.data if form.topic.data in COMMUNITY_TOPICS else DEFAULT_TOPIC
 
 
 def _save_news_fields(post, form):
@@ -227,6 +243,8 @@ def write():
             rows = _rows_from_item(item)
         elif request.args.get("board") in dict(form.board.choices):
             form.board.data = request.args["board"]
+            if request.args.get("topic") in COMMUNITY_TOPICS:
+                form.topic.data = request.args["topic"]
     if not form.board.choices:
         abort(403)
     if form.validate_on_submit():
@@ -234,6 +252,7 @@ def write():
             abort(403)
         post = Post(board=form.board.data, title=form.title.data.strip(), body=form.body.data.strip(),
                     user_id=current_user.id)
+        _save_topic(post, form)
         _save_news_fields(post, form)
         if item and BOARDS[post.board][1] == "news":
             post.original_title = item.title[:500] if (item.title_ko and item.title_ko != item.title) else None
@@ -268,6 +287,7 @@ def edit(post_id):
         post.board = form.board.data
         post.title = form.title.data.strip()
         post.body = form.body.data.strip()
+        _save_topic(post, form)
         _save_news_fields(post, form)
         if current_user.can_write_news and BOARDS[post.board][1] == "news":
             _apply_reactions(post, rows)
