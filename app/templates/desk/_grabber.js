@@ -3,6 +3,7 @@
 (function () {
   var O = {{ origin|tojson }};
   var N = {{ cfg.COMMENTS_PER_ITEM|int }};
+  var VERSION = 3; /* 버튼 코드 버전: 바뀌면 즐겨찾기 버튼을 다시 등록해야 함 */
   var h = location.hostname, site = null;
   if (/(^|\.)reddit\.com$/.test(h)) { site = "reddit"; }
   else if (/(^|\.)youtube\.com$/.test(h)) { site = "youtube"; }
@@ -118,7 +119,7 @@
       text: vd.shortDescription || text(document.querySelector("#description-inline-expander")),
       author: vd.author || text(document.querySelector("ytd-channel-name a")),
       published: mf.publishDate || mf.uploadDate || "",
-      num_comments: count, comments: comments, debug: { stop: stop, read: comments.length }
+      num_comments: count, comments: comments, debug: { v: VERSION, stop: stop, read: comments.length }
     });
   }
 
@@ -159,11 +160,13 @@
     /* X 는 스크롤하면 화면 밖 게시물을 지우므로, 문서 안의 절대 위치로 '본문 아래'인지 판단한다 */
     function yOf(el) { return el.getBoundingClientRect().top + window.scrollY; }
     /* '답글 더 보기' 버튼과 '더 찾아보기' 같은 다른 섹션 제목 (X 화면 언어별) */
-    var MORE = /(show (more|additional) repl|more replies|답글 더 보기|답글 더보기|더 많은 답글|추가 답글|返信をさらに表示|さらに返信|显示更多回复|顯示更多回覆|mostrar más respuestas|mostrar mais respostas|weitere antworten|afficher plus de réponses)/i;
+    var MORE = /(show (more|additional) repl|more replies|show replies|답글 더 보기|답글 더보기|더 많은 답글|추가 답글|답글 보기|답글 표시|返信をさらに表示|さらに返信|显示更多回复|顯示更多回覆|mostrar más respuestas|mostrar mais respostas|weitere antworten|afficher plus de réponses)/i;
     var DISCOVER = /(discover more|더 찾아보기|더 많은 게시물 보기|もっと見つける|发现更多|探索更多|descubre más|descubra mais|mehr entdecken|découvrir plus|en découvrir plus)/i;
     var mainY = yOf(main), endY = Infinity;
     var seen = {}, y0 = window.scrollY, last = 0, still = 0, clicked = 0, stop = "timeout";
     seen[id] = true;
+    var notes = [], articles = 0, noText = 0;
+    function note(t) { t = (t || "").replace(/\s+/g, " ").trim().slice(0, 60); if (t && notes.indexOf(t) < 0 && notes.length < 12) { notes.push(t); } }
     function collect() {
       document.querySelectorAll("div[data-testid='cellInnerDiv']").forEach(function (cell) {
         var y = yOf(cell);
@@ -171,12 +174,16 @@
         var a = cell.querySelector("article[data-testid='tweet']");
         if (!a) {
           var h = cell.querySelector("h2");
+          note(text(cell)); /* 진단용: 글이 아닌 칸(버튼·제목)의 문구 */
           if (h && DISCOVER.test(text(h))) { endY = y; } /* 다른 섹션이 시작되면 거기까지만 */
           return;
         }
         var rid = idOf(a);
-        if (!rid || seen[rid]) { return; }
+        if (!rid) { note("[ID 없는 게시물] " + text(a)); return; }
+        if (seen[rid]) { return; }
         seen[rid] = true;
+        articles += 1;
+        if (!a.querySelector("[data-testid='tweetText']")) { noText += 1; }
         var body = text(a.querySelector("[data-testid='tweetText']"));
         if (body) { data.comments.push({ author: "@" + handleOf(a), body: body, score: metric(a, "like"), y: y }); }
       });
@@ -209,7 +216,9 @@
     }
     window.scrollTo(0, y0);
     data.comments.forEach(function (c) { delete c.y; });
-    data.debug = { stop: stop, clicked: clicked, read: data.comments.length };
+    data.debug = { v: VERSION, stop: stop, clicked: clicked, read: data.comments.length, articles: articles,
+                   no_text: noText, notes: notes, logged_in: !!(document.querySelector("[data-testid='SideNav_AccountSwitcher_Button']") ||
+                                 /(^|; )twid=/.test(document.cookie)) };
     deliver(data);
   }
 

@@ -395,7 +395,20 @@ def test_translation_sets_region_only_when_unknown(app, monkeypatch, article_fet
 def test_import_reports_read_count_and_stop_reason(app, client):
     _staff_client(client)
     payload = json.loads(x_payload())
-    payload["debug"] = {"stop": "section", "clicked": 2, "read": 2}
+    payload["debug"] = {"v": 3, "stop": "section", "clicked": 2, "read": 2, "articles": 9, "no_text": 0,
+                        "notes": ["Show probable spam", "Discover more"], "logged_in": True}
     r = client.post("/desk/import", data={"site": "x", "payload": json.dumps(payload)}, follow_redirects=True)
     html = r.get_data(as_text=True)
     assert "전체 340개 중 2개 저장" in html and "다른 섹션이 시작됨" in html and "답글 더 보기&#39; 2번" in html
+    assert "버튼 v3" in html and "화면에서 본 답글 9개" in html and "Show probable spam | Discover more" in html
+    assert "로그인이 안 된" not in html
+
+
+def test_import_flags_old_button_and_logged_out(app, client):
+    _staff_client(client)
+    r = client.post("/desk/import", data={"site": "x", "payload": x_payload()}, follow_redirects=True)
+    assert "예전 가져오기 버튼" in r.get_data(as_text=True)
+    payload = json.loads(x_payload(id="1861000000000000999"))
+    payload["debug"] = {"v": 3, "stop": "idle", "articles": 9, "logged_in": False}
+    r = client.post("/desk/import", data={"site": "x", "payload": json.dumps(payload)}, follow_redirects=True)
+    assert "X 로그인이 안 된 것 같습니다" in r.get_data(as_text=True)

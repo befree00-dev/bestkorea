@@ -236,8 +236,21 @@ def read_note(site, text, item):
         debug = {}
     reason = STOP_REASONS.get(debug.get("stop"), "")
     note = f"전체 {item.num_comments:,}개 중 {len(item.reactions)}개 저장"
+    if not debug.get("v"):
+        return note + ", 예전 가져오기 버튼입니다 — 가져오기 페이지에서 버튼을 다시 등록하세요"
+    note += f", 버튼 v{debug['v']}"
     if reason:
         note += f", 읽기를 멈춘 이유: {reason}"
     if debug.get("clicked"):
         note += f", '답글 더 보기' {debug['clicked']}번 누름"
+    if site == "x":
+        if "articles" in debug:
+            note += f", 화면에서 본 답글 {debug['articles']}개"
+            if debug.get("no_text"):
+                note += f"(그중 글자 없는 답글 {debug['no_text']}개)"
+        if debug.get("logged_in") is False:
+            note += ", X 로그인이 안 된 것 같습니다(로그인해야 답글이 모두 보임)"
+        notes = [str(n)[:60] for n in (debug.get("notes") or [])[:12] if n]
+        if notes:
+            note += ", 답글 사이에 보인 문구: " + " | ".join(notes)
     return note
