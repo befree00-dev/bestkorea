@@ -3,7 +3,7 @@
 (function () {
   var O = {{ origin|tojson }};
   var N = {{ cfg.COMMENTS_PER_ITEM|int }};
-  var VERSION = 3; /* 버튼 코드 버전: 바뀌면 즐겨찾기 버튼을 다시 등록해야 함 */
+  var VERSION = 4; /* 버튼 코드 버전: 바뀌면 즐겨찾기 버튼을 다시 등록해야 함 */
   var h = location.hostname, site = null;
   if (/(^|\.)reddit\.com$/.test(h)) { site = "reddit"; }
   else if (/(^|\.)youtube\.com$/.test(h)) { site = "youtube"; }
@@ -11,11 +11,16 @@
   if (!site) { alert("BestKorea: Reddit, YouTube, X 게시물 페이지에서 눌러 주세요."); return; }
   if (window.__bestkoreaBusy) { alert("BestKorea: 이미 가져오는 중입니다."); return; }
 
-  var w = window.open(O + "/desk/import?from=bookmarklet", "bestkorea_import");
-  var payload = null, ready = false, sent = false, box = null;
+  /* Reddit 은 바로 읽으므로 새 탭을 먼저 연다. YouTube·X 는 화면을 내리며 읽어야 하는데,
+     새 탭이 먼저 열려 이 탭이 가려지면 브라우저가 화면 갱신을 멈춰 댓글이 더 불러와지지 않는다.
+     그래서 다 읽은 뒤 운영자가 '수집함으로 보내기'를 누를 때 새 탭을 연다. */
+  function openImport() { return window.open(O + "/desk/import?from=bookmarklet", "bestkorea_import"); }
+  var w = site === "reddit" ? openImport() : null;
+  var payload = null, ready = false, sent = false, box = null, wasHidden = document.hidden;
+  document.addEventListener("visibilitychange", function () { if (document.hidden) { wasHidden = true; } });
   window.__bestkoreaBusy = true;
 
-  function status(text, copyText) {
+  function status(text, copyText, action) {
     if (!box) {
       box = document.createElement("div");
       box.style.cssText = "position:fixed;top:16px;right:16px;z-index:2147483647;max-width:340px;padding:14px 16px;" +
@@ -32,6 +37,13 @@
       };
       box.appendChild(b);
     }
+    if (action) {
+      var a = document.createElement("button");
+      a.textContent = action.label;
+      a.style.cssText = "display:block;margin-top:10px;padding:8px 14px;border:0;border-radius:6px;background:#fff;color:#1f4fd8;font-weight:700;font-size:15px;cursor:pointer";
+      a.onclick = action.run;
+      box.appendChild(a);
+    }
   }
   function finish() { window.__bestkoreaBusy = false; setTimeout(function () { if (box) { box.remove(); box = null; } }, 4000); }
   function fail(msg) { window.__bestkoreaBusy = false; if (box) { box.remove(); box = null; } alert("BestKorea: " + msg); if (w) { try { w.close(); } catch (e) {} } }
@@ -43,9 +55,15 @@
       finish();
     }
   }
-  function deliver(obj) {
+  function deliver(obj, summary) {
     payload = typeof obj === "string" ? obj : JSON.stringify(obj);
-    go();
+    if (w) { go(); waitOrCopy(); return; }
+    status((summary || "다 읽었습니다.") + " 아래 버튼을 누르면 BestKorea 수집함으로 보냅니다.", null, {
+      label: "수집함으로 보내기",
+      run: function () { w = openImport(); go(); waitOrCopy(); status("보내는 중…"); }
+    });
+  }
+  function waitOrCopy() {
     setTimeout(function () {
       if (!sent) {
         status("가져오기 창과 연결되지 않았습니다. 아래 버튼으로 복사한 뒤 BestKorea 가져오기 페이지에 붙여넣으세요.",
@@ -119,8 +137,8 @@
       text: vd.shortDescription || text(document.querySelector("#description-inline-expander")),
       author: vd.author || text(document.querySelector("ytd-channel-name a")),
       published: mf.publishDate || mf.uploadDate || "",
-      num_comments: count, comments: comments, debug: { v: VERSION, stop: stop, read: comments.length }
-    });
+      num_comments: count, comments: comments, debug: { v: VERSION, stop: stop, read: comments.length, hidden: wasHidden }
+    }, "댓글 " + comments.length + "개를 읽었습니다.");
   }
 
   /* ---------------- X: 게시물 + 화면에 불러온 답글 ---------------- */
@@ -208,7 +226,11 @@
       var atBottom = window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 10;
       var pastEnd = endY !== Infinity && window.scrollY + window.innerHeight >= endY;
       if (data.comments.length > last || pressed) { still = 0; }
-      else if (atBottom || pastEnd) { still += 1; if (still >= 8) { stop = endY !== Infinity ? "section" : "idle"; break; } }
+      else if (atBottom || pastEnd) {
+        still += 1;
+        if (still >= 10) { stop = endY !== Infinity ? "section" : "idle"; break; }
+        if (!pastEnd && still % 3 === 0) { window.scrollBy(0, -window.innerHeight); await sleep(400); } /* 위로 조금 올렸다 내려 X 가 다음 답글을 불러오게 함 */
+      }
       last = data.comments.length;
       status("답글 " + data.comments.length + "개 읽는 중… (화면이 자동으로 내려갑니다)");
       if (!pastEnd) { window.scrollBy(0, window.innerHeight * 0.8); }
@@ -216,10 +238,10 @@
     }
     window.scrollTo(0, y0);
     data.comments.forEach(function (c) { delete c.y; });
-    data.debug = { v: VERSION, stop: stop, clicked: clicked, read: data.comments.length, articles: articles,
+    data.debug = { v: VERSION, stop: stop, clicked: clicked, read: data.comments.length, articles: articles, hidden: wasHidden,
                    no_text: noText, notes: notes, logged_in: !!(document.querySelector("[data-testid='SideNav_AccountSwitcher_Button']") ||
                                  /(^|; )twid=/.test(document.cookie)) };
-    deliver(data);
+    deliver(data, "답글 " + data.comments.length + "개를 읽었습니다.");
   }
 
   var run = { reddit: grabReddit, youtube: grabYouTube, x: grabX }[site];

@@ -412,3 +412,11 @@ def test_import_flags_old_button_and_logged_out(app, client):
     payload["debug"] = {"v": 3, "stop": "idle", "articles": 9, "logged_in": False}
     r = client.post("/desk/import", data={"site": "x", "payload": json.dumps(payload)}, follow_redirects=True)
     assert "X 로그인이 안 된 것 같습니다" in r.get_data(as_text=True)
+
+
+def test_import_reports_hidden_tab(app, client):
+    _staff_client(client)
+    payload = json.loads(x_payload())
+    payload["debug"] = {"v": 4, "stop": "idle", "articles": 11, "hidden": True, "logged_in": True}
+    r = client.post("/desk/import", data={"site": "x", "payload": json.dumps(payload)}, follow_redirects=True)
+    assert "읽는 도중 탭이 가려졌습니다" in r.get_data(as_text=True)

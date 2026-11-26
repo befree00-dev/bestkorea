@@ -243,6 +243,8 @@ def read_note(site, text, item):
         note += f", 읽기를 멈춘 이유: {reason}"
     if debug.get("clicked"):
         note += f", '답글 더 보기' {debug['clicked']}번 누름"
+    if debug.get("hidden"):
+        note += ", 읽는 도중 탭이 가려졌습니다(다른 탭을 보면 댓글이 덜 불러와질 수 있음)"
     if site == "x":
         if "articles" in debug:
             note += f", 화면에서 본 답글 {debug['articles']}개"
