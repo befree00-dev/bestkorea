@@ -1,0 +1,64 @@
+{# 본문 편집 도구: 이미지 넣기(버튼·끌어다 놓기·붙여넣기), 미리보기 #}
+<div class="body-tools">
+  <button type="button" class="btn small" id="img-btn">🖼 이미지 넣기</button>
+  <button type="button" class="btn small" id="preview-btn">미리보기</button>
+  <span class="small muted" id="img-status">이미지를 본문 칸에 끌어다 놓거나 붙여넣기(⌘V)해도 됩니다. JPG·PNG·GIF·WEBP, {{ cfg.MAX_IMAGE_BYTES // (1024 * 1024) }}MB 이하</span>
+  <input type="file" id="img-file" accept="image/jpeg,image/png,image/gif,image/webp" multiple hidden>
+</div>
+<div class="article-body body-preview box" id="body-preview" hidden></div>
+<script>
+  (function () {
+    var body = document.getElementById("body"), file = document.getElementById("img-file"),
+        status = document.getElementById("img-status"), preview = document.getElementById("body-preview"),
+        csrf = (document.querySelector("input[name=csrf_token]") || {}).value || "";
+    var defaultStatus = status.textContent;
+
+    function insertAtCursor(text) {
+      var start = body.selectionStart, end = body.selectionEnd, v = body.value;
+      var before = v.slice(0, start), after = v.slice(end);
+      var pre = before && !before.endsWith("\n") ? "\n" : "", post = after.startsWith("\n") ? "" : "\n";
+      body.value = before + pre + text + post + after;
+      var pos = (before + pre + text + post).length;
+      body.setSelectionRange(pos, pos);
+      body.focus();
+    }
+    function upload(f) {
+      var mark = "[이미지 올리는 중: " + f.name + "]";
+      insertAtCursor(mark);
+      status.textContent = "이미지 올리는 중…";
+      var fd = new FormData();
+      fd.append("image", f);
+      return fetch("{{ url_for('uploads.upload_image') }}", { method: "POST", body: fd, headers: { "X-CSRFToken": csrf }, credentials: "same-origin" })
+        .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || ("HTTP " + r.status)); return d; }); })
+        .then(function (d) { body.value = body.value.replace(mark, "![](" + d.url + ")"); status.textContent = defaultStatus; })
+        .catch(function (e) { body.value = body.value.replace(mark + "\n", "").replace(mark, ""); status.textContent = "업로드 실패: " + e.message; });
+    }
+    function uploadAll(files) {
+      var list = Array.prototype.filter.call(files, function (f) { return /^image\//.test(f.type); });
+      list.reduce(function (p, f) { return p.then(function () { return upload(f); }); }, Promise.resolve());
+      return list.length > 0;
+    }
+    document.getElementById("img-btn").addEventListener("click", function () { file.click(); });
+    file.addEventListener("change", function () { uploadAll(file.files); file.value = ""; });
+    body.addEventListener("paste", function (e) {
+      var files = e.clipboardData && e.clipboardData.files;
+      if (files && files.length && uploadAll(files)) e.preventDefault();
+    });
+    body.addEventListener("dragover", function (e) { e.preventDefault(); });
+    body.addEventListener("drop", function (e) {
+      if (e.dataTransfer && e.dataTransfer.files.length) {
+        e.preventDefault();
+        body.focus();
+        uploadAll(e.dataTransfer.files);
+      }
+    });
+    document.getElementById("preview-btn").addEventListener("click", function () {
+      if (!preview.hidden) { preview.hidden = true; this.textContent = "미리보기"; return; }
+      var btn = this, fd = new URLSearchParams();
+      fd.append("body", body.value);
+      fetch("{{ url_for('main.preview') }}", { method: "POST", body: fd, headers: { "X-CSRFToken": csrf }, credentials: "same-origin" })
+        .then(function (r) { return r.text(); })
+        .then(function (html) { preview.innerHTML = html || "<p class='muted'>내용이 없습니다.</p>"; preview.hidden = false; btn.textContent = "미리보기 닫기"; });
+    });
+  })();
+</script>

@@ -14,6 +14,7 @@ from .constants import (
 from .extensions import csrf, db, login_manager
 
 _URL_RE = re.compile(r"https?://[^\s<>\"']+")
+_IMG_LINE_RE = re.compile(r"^!\[([^\]\n]{0,200})\]\(([^\s()<>\"']{1,2000})\)$")
 _YT_RE = re.compile(r"https?://(?:www\.|m\.)?(?:youtube\.com/watch\?(?:.*&)?v=|youtu\.be/)([A-Za-z0-9_-]{11})")
 
 
@@ -41,11 +42,13 @@ def create_app(config_class=Config):
     from .views import bp as main_bp
     from .admin import bp as admin_bp
     from .desk import bp as desk_bp
+    from .uploads import bp as uploads_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(main_bp)
     app.register_blueprint(admin_bp)
     app.register_blueprint(desk_bp)
+    app.register_blueprint(uploads_bp)
 
     _register_template_helpers(app)
     _register_errors(app)
@@ -114,6 +117,34 @@ def _register_template_helpers(app):
     def youtube_id(url):
         m = _YT_RE.match(url or "")
         return m.group(1) if m else None
+
+    @app.template_filter("render_body")
+    def render_body(text):
+        """게시글 본문: '![설명](주소)' 한 줄은 이미지로, 나머지는 nl2br 과 같이 처리.
+        이미지 주소는 이 사이트 업로드(/uploads/...)나 https 주소만 허용."""
+        parts, buf = [], []
+
+        def flush():
+            if buf:
+                parts.append(str(nl2br("\n".join(buf))))
+                buf.clear()
+
+        for line in (text or "").split("\n"):
+            m = _IMG_LINE_RE.match(line.strip())
+            if m and (m.group(2).startswith("/uploads/") or m.group(2).startswith("https://")):
+                flush()
+                alt, src = escape(m.group(1)), escape(m.group(2))
+                parts.append(f'<figure class="body-image"><img src="{src}" alt="{alt}" loading="lazy" '
+                             f'referrerpolicy="no-referrer"></figure>')
+            else:
+                buf.append(line)
+        flush()
+        return Markup("".join(parts))
+
+    @app.template_filter("body_text")
+    def body_text(text):
+        """미리보기·검색 설명용: 이미지 줄을 뺀 본문."""
+        return "\n".join(l for l in (text or "").split("\n") if not _IMG_LINE_RE.match(l.strip()))
 
     @app.template_filter("nl2br")
     def nl2br(text):

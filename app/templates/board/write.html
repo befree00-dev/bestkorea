@@ -26,7 +26,8 @@
     {{ form.hidden_tag() }}
     {{ field(form.board) }}
     {{ field(form.title, maxlength=200) }}
-    {{ field(form.body, rows=14, hint='HTML은 사용할 수 없으며, 링크는 자동으로 연결됩니다.') }}
+    {{ field(form.body, rows=14, hint='HTML은 사용할 수 없으며, 링크는 자동으로 연결됩니다. 이미지는 ![](주소) 한 줄로 들어가고 게시글에서 그림으로 보입니다.') }}
+    {% include "partials/body_editor.html" %}
     {% if current_user.can_write_news %}
     <fieldset class="news-fields news-only" id="news-fields">
       <legend>해외 반응 글 정보</legend>

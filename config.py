@@ -44,6 +44,11 @@ class Config:
 
     POSTS_PER_PAGE = int(os.environ.get("POSTS_PER_PAGE", 20))
 
+    # 본문 이미지 업로드 (Docker 에서는 uploads 볼륨에 보존)
+    UPLOAD_FOLDER = os.environ.get("UPLOAD_FOLDER", os.path.join(BASE_DIR, "instance", "uploads"))
+    MAX_IMAGE_BYTES = int(os.environ.get("MAX_IMAGE_MB", 10)) * 1024 * 1024
+    MAX_CONTENT_LENGTH = 20 * 1024 * 1024  # 요청 하나의 최대 크기
+
     # --- Google AdSense ---
     # 예: ca-pub-1234567890123456 (비워 두면 광고 대신 자리표시만 보임)
     ADSENSE_CLIENT = os.environ.get("ADSENSE_CLIENT", "")

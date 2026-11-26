@@ -277,6 +277,15 @@ def edit(post_id):
     return render_template("board/write.html", form=form, post=post, item=None, rows=rows)
 
 
+# ---------------------------------------------------------------- 글쓰기 미리보기
+@bp.route("/preview", methods=["POST"])
+@login_required
+def preview():
+    """글쓰기 화면의 미리보기: 실제 게시글과 같은 방식으로 본문을 그린다."""
+    render = current_app.jinja_env.filters["render_body"]
+    return Response(str(render(request.form.get("body", "")[:100000])), mimetype="text/html")
+
+
 # ---------------------------------------------------------------- 기자 지원
 @bp.route("/reporter/apply", methods=["GET", "POST"])
 @login_required

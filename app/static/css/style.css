@@ -276,3 +276,9 @@ code { background: var(--chip); padding: 1px 5px; border-radius: 4px; font-size:
 .reaction-editor .r-removed textarea, .reaction-editor .r-removed input[type=text] { text-decoration: line-through; }
 #r-add { margin: 4px 0 12px; }
 fieldset[hidden] { display: none; }
+
+/* 본문 이미지 */
+.body-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: -6px 0 14px; }
+.body-preview { margin-bottom: 14px; }
+.body-image { margin: 14px 0; }
+.body-image img { max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0 auto; }

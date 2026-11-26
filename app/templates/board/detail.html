@@ -2,7 +2,7 @@
 {% from "partials/ad.html" import ad with context %}
 {% from "partials/role.html" import role_badge %}
 {% block title %}{{ post.title }}{% endblock %}
-{% block description %}{{ (post.body or post.original_title or post.title)|striptags|truncate(150) }}{% endblock %}
+{% block description %}{{ ((post.body|body_text) or post.original_title or post.title)|striptags|truncate(150) }}{% endblock %}
 {% block og_type %}article{% endblock %}
 {% block og_image %}{% if post.image_url %}<meta property="og:image" content="{{ post.image_url }}">{% endif %}{% endblock %}
 {% block content %}
@@ -23,7 +23,7 @@
   {% if yt %}<div class="video"><iframe src="https://www.youtube-nocookie.com/embed/{{ yt }}" title="YouTube 영상" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
   {% elif post.image_url %}<figure class="article-image"><img src="{{ post.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer"></figure>{% endif %}
 
-  {% if post.body %}<div class="article-body">{{ post.body|nl2br }}</div>{% endif %}
+  {% if post.body %}<div class="article-body">{{ post.body|render_body }}</div>{% endif %}
 
   {% if post.source_url %}
   <a class="source-card" href="{{ post.source_url }}" target="_blank" rel="nofollow noopener">

@@ -12,7 +12,7 @@ COPY requirements.txt .
 RUN pip install -r requirements.txt
 
 COPY . .
-RUN useradd --create-home --uid 1000 app && mkdir -p instance && chown -R app:app /app
+RUN useradd --create-home --uid 1000 app && mkdir -p instance/uploads && chown -R app:app /app
 USER app
 
 EXPOSE 8000

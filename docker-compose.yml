@@ -47,6 +47,8 @@ services:
     environment: *app-env
     ports:
       - "${WEB_PORT:-8000}:8000"
+    volumes:
+      - uploads:/app/instance/uploads   # 본문에 올린 이미지 보존
     depends_on:
       db:
         condition: service_healthy
@@ -59,3 +61,4 @@ services:
 
 volumes:
   pgdata:
+  uploads:
