@@ -189,6 +189,8 @@ def test_cli_collect(app, monkeypatch):
 
 
 # ------------------------------------------------------------------ 번역
+FULL_BODY_KO = "삼성전자 주가가 월요일 급등했다.\n\n" + "코스피 지수는 사상 최고치를 기록했다. " * 120 + "\n\n하반기 전망도 긍정적이다."
+
 ARTICLE_HTML = """<html><head><title>Samsung</title>
 <meta property="og:image" content="/img/lead.jpg"></head><body><article>
 <h1>Samsung shares jump on chip demand</h1>
@@ -249,9 +251,9 @@ def article_fetch(monkeypatch):
     return fetched
 
 
-def test_translate_summarizes_article_and_all_comments(app, monkeypatch, article_fetch):
+def test_translate_full_article_and_all_comments(app, monkeypatch, article_fetch):
     parsed = tr.Translation(
-        title_ko="삼성 주가, 반도체 수요에 급등", summary_ko="가" * 700, category="economy",
+        title_ko="삼성 주가, 반도체 수요에 급등", body_ko=FULL_BODY_KO, category="economy",
         comments_ko=[tr.CommentKo(index=1, text="저점 매수 각"), tr.CommentKo(index=0, text="좋은 소식")],
     )
     client, calls = fake_client(parsed)
@@ -264,17 +266,19 @@ def test_translate_summarizes_article_and_all_comments(app, monkeypatch, article
     assert article_fetch == ["https://wire.example/samsung"]
     assert item.resolved_url == "https://wire.example/samsung"
     assert item.image_url == "https://wire.example/img/lead.jpg"  # og:image 절대 주소
-    assert len(item.summary_ko) <= 500
+    assert item.summary_ko == FULL_BODY_KO.strip()  # 줄이지 않고 본문 전체 번역을 그대로 저장
+    assert "저작권" in item.translate_note  # 언론사 기사 전문 번역 경고
     assert item.comments_ko == ["좋은 소식", "저점 매수 각"]  # index 로 순서 맞춤
     # Claude 에는 추출한 본문과 번호 매긴 댓글이 모두 전달됨
     prompt = calls[0]["messages"][0]["content"]
     assert "KOSPI index to a record high" in prompt and "[0] Great news" in prompt and "[1] Buy the dip" in prompt
     assert calls[0]["model"] == "claude-opus-5-5" and calls[0]["fallbacks"] == "default"
-    assert "500자 이내" in calls[0]["system"]
+    assert "본문 전체" in calls[0]["system"] and "요약하거나 줄이지" in calls[0]["system"]
+    assert calls[0]["max_tokens"] == 128000
 
 
 def test_translate_youtube_uses_description(app, monkeypatch, article_fetch):
-    parsed = tr.Translation(title_ko="외국인 길거리 음식 체험", summary_ko="요약", category="fun",
+    parsed = tr.Translation(title_ko="외국인 길거리 음식 체험", body_ko="번역문", category="fun",
                             comments_ko=[tr.CommentKo(index=0, text="맛있겠다")])
     client, calls = fake_client(parsed)
     monkeypatch.setattr(tr, "_get_client", lambda: client)
@@ -285,11 +289,11 @@ def test_translate_youtube_uses_description(app, monkeypatch, article_fetch):
     item = db.session.get(CollectedItem, item.id)
     assert item.translate_status == "done" and article_fetch == []  # 외부 페이지 요청 없음
     assert "Myeongdong" in calls[0]["messages"][0]["content"]
-    assert "영상 제목과 설명" in item.translate_note
+    assert "영상 설명을 번역" in item.translate_note
 
 
 def test_translate_reddit_self_post_without_article(app, monkeypatch, article_fetch):
-    parsed = tr.Translation(title_ko="서울 지하철", summary_ko="요약", category="fun",
+    parsed = tr.Translation(title_ko="서울 지하철", body_ko="번역문", category="fun",
                             comments_ko=[tr.CommentKo(index=0, text="동의")])
     client, calls = fake_client(parsed)
     monkeypatch.setattr(tr, "_get_client", lambda: client)
@@ -312,7 +316,7 @@ def test_translate_falls_back_when_article_unavailable(app, monkeypatch):
     monkeypatch.setattr(googlenewsdecoder, "gnewsdecoder",
                         lambda url, timeout=None: {"success": True, "decoded_url": "https://paywall.example/a"})
     monkeypatch.setattr(tr, "fetch_html", broken)
-    parsed = tr.Translation(title_ko="t", summary_ko="s", category="politics", comments_ko=[])
+    parsed = tr.Translation(title_ko="t", body_ko="s", category="politics", comments_ko=[])
     client, _ = fake_client(parsed)
     monkeypatch.setattr(tr, "_get_client", lambda: client)
     item = make_item(comments=[], snippet="short snippet")
@@ -338,7 +342,7 @@ def test_desk_translate_button_flow(app, client, monkeypatch, article_fetch):
     op.set_password("password123")
     db.session.add(op)
     db.session.commit()
-    parsed = tr.Translation(title_ko="삼성 주가 급등", summary_ko="요약문", category="economy",
+    parsed = tr.Translation(title_ko="삼성 주가 급등", body_ko="번역된 본문", category="economy",
                             comments_ko=[tr.CommentKo(index=0, text="좋은 소식"), tr.CommentKo(index=1, text="매수")])
     fake, _ = fake_client(parsed)
     monkeypatch.setattr(tr, "_get_client", lambda: fake)
@@ -349,7 +353,7 @@ def test_desk_translate_button_flow(app, client, monkeypatch, article_fetch):
     assert html.count('action="/desk/%d/translate"' % item.id) == 2  # 상단·하단 번역 버튼
     client.post(f"/desk/{item.id}/translate")
     html = client.get(f"/desk/{item.id}").get_data(as_text=True)
-    assert "삼성 주가 급등" in html and "요약문" in html and "좋은 소식" in html and "게시글로 작성" in html
+    assert "삼성 주가 급등" in html and "번역된 본문" in html and "좋은 소식" in html and "게시글로 작성" in html
     assert client.get(f"/desk/{item.id}/status.json").get_json() == {"translate_status": "done"}
 
 
@@ -361,10 +365,12 @@ def test_private_urls_blocked():
     assert not tr.is_public_http_url("http://10.0.0.5/")
 
 
-def test_trim_keeps_sentence_boundary():
-    text = "첫 문장입니다. " * 80
-    out = tr._trim(text, 500)
-    assert len(out) <= 500 and out.endswith("다.")
+def test_clean_text_keeps_paragraphs():
+    from app.collector.fetchers import clean_text
+
+    raw = "First paragraph  line.\n\n\n\nSecond   paragraph.\nNext line"
+    assert clean_text(raw, keep_lines=True) == "First paragraph line.\n\nSecond paragraph.\nNext line"
+    assert clean_text(raw) == "First paragraph line. Second paragraph. Next line"
 
 
 # ------------------------------------------------------------------ X(트위터) 수집

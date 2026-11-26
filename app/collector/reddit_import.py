@@ -58,7 +58,8 @@ def parse_reddit_json(text, min_comments, max_comments):
         author = c.get("author") or ""
         if not body or body in ("[deleted]", "[removed]") or c.get("stickied") or author.lower() == "automoderator":
             continue
-        comments.append(dict(author=author or "unknown", body=clean_text(body, COMMENT_LIMIT), score=c.get("score", 0)))
+        comments.append(dict(author=author or "unknown", body=clean_text(body, COMMENT_LIMIT, keep_lines=True),
+                             score=c.get("score", 0)))
     comments.sort(key=lambda c: c["score"] or 0, reverse=True)
 
     external = None
@@ -69,7 +70,7 @@ def parse_reddit_json(text, min_comments, max_comments):
             external = None
 
     title = clean_text(post.get("title"), 300)
-    selftext = clean_text(post.get("selftext"), 5000)
+    selftext = clean_text(post.get("selftext"), 20000, keep_lines=True)
     created = post.get("created_utc")
     return Item(
         site="reddit", external_id=str(post.get("id", ""))[:50], title=title,

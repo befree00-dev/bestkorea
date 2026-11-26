@@ -96,7 +96,7 @@ def search_candidates(cfg, session, errors):
                 site=SITE, external_id=v["id"], title=clean_text(title, 300),
                 url=f"https://www.youtube.com/watch?v={v['id']}", country=SITE,
                 lang=(audio_lang or lang_of.get(v["id"], ""))[:10],
-                summary=clean_text(description, 5000), source_name=sn.get("channelTitle", ""),
+                summary=clean_text(description, 5000, keep_lines=True), source_name=sn.get("channelTitle", ""),
                 category=classify(f"{title} {description[:500]}"),
                 published_at=_parse_time(sn.get("publishedAt")), image_url=_thumbnail(sn),
                 num_comments=comments,
@@ -112,7 +112,7 @@ def fetch_comments(cfg, session, item):
     out = []
     for thread in data.get("items", []):
         c = thread.get("snippet", {}).get("topLevelComment", {}).get("snippet", {})
-        body = clean_text(c.get("textDisplay") or c.get("textOriginal"), COMMENT_LIMIT)
+        body = clean_text(c.get("textDisplay") or c.get("textOriginal"), COMMENT_LIMIT, keep_lines=True)
         if body:
             out.append(dict(author=c.get("authorDisplayName") or "unknown", body=body, score=c.get("likeCount", 0)))
     return out

@@ -195,6 +195,7 @@ def test_publish_from_desk_item(client):
     login(client, "o@example.com")
     html = client.get(f"/write?from_item={item.id}").get_data(as_text=True)
     assert "서울 지하철은 놀랍다" in html and "요약입니다." in html and "현지 반응" in html
+    assert "<summary>원문</summary>" not in client.get(f"/desk/{item.id}").get_data(as_text=True)
     r = client.post("/write", data=dict(board="politics", title="서울 지하철은 놀랍다", body="요약입니다.",
                                         source_url=item.url, country="reddit", image_url=item.image_url,
                                         from_item=str(item.id)))
@@ -205,6 +206,7 @@ def test_publish_from_desk_item(client):
     assert item.status == "published" and item.post_id == post.id
     page = client.get(f"/b/politics/{post.id}").get_data(as_text=True)
     assert "완전 동의!" in page and "현지 반응" in page
+    assert "<summary>원문</summary>" not in page and "Totally agree!" not in page  # 번역문만, 원문 보기 없음
 
 
 def test_reporter_cannot_use_desk_item(client):

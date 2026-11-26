@@ -78,8 +78,7 @@ class Config:
     # --- 수집함 '번역' 버튼: Claude API (ANTHROPIC_API_KEY 필요) ---
     ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-5-5")
     ANTHROPIC_EFFORT = os.environ.get("ANTHROPIC_EFFORT", "low")
-    SUMMARY_MAX_CHARS = int(os.environ.get("SUMMARY_MAX_CHARS", 500))
-    ARTICLE_MAX_CHARS = int(os.environ.get("ARTICLE_MAX_CHARS", 60000))
+    ARTICLE_MAX_CHARS = int(os.environ.get("ARTICLE_MAX_CHARS", 60000))  # 번역할 본문 최대 글자 수
     TRANSLATE_SYNC = False  # 테스트용: True 면 번역을 백그라운드가 아닌 요청 안에서 실행
 
 

@@ -160,10 +160,10 @@ class CollectedItem(db.Model):
     translate_status = db.Column(db.String(20), default="none", nullable=False)
     translate_requested_at = db.Column(db.DateTime)
     translate_error = db.Column(db.Text)
-    translate_note = db.Column(db.Text)  # 예: 원문 본문을 가져오지 못해 제목만으로 요약
+    translate_note = db.Column(db.Text)  # 예: 원문 본문을 가져오지 못해 수집된 내용만 번역
     resolved_url = db.Column(db.String(2000))  # 실제 기사 주소 (Google News 경유 주소를 푼 것)
     title_ko = db.Column(db.String(500))
-    summary_ko = db.Column(db.Text)
+    summary_ko = db.Column(db.Text)  # 본문 전체 번역 (예전 요약 기능의 컬럼 이름을 그대로 사용)
     category_ko = db.Column(db.String(30))
     comments_ko = db.Column(db.JSON)  # 원문 comments 와 같은 순서의 번역 리스트
     translated_at = db.Column(db.DateTime)

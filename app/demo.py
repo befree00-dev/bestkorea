@@ -51,7 +51,7 @@ def seed():
                 board=board, user_id=(reporter if i % 2 == 0 else operator).id,
                 title=f"[샘플] {SOURCES[country]}가 본 한국 #{b_i * 3 + i + 1}",
                 original_title=f"[Sample] How {SOURCES[country]} sees Korea #{b_i * 3 + i + 1}",
-                body="화면 확인용 샘플 기사입니다. 실제로는 수집함에서 번역한 500자 이내 요약이 들어갑니다.",
+                body="화면 확인용 샘플 기사입니다. 실제로는 수집함에서 번역한 본문이 들어갑니다.",
                 source_url=f"https://example.com/sample/post/{board}/{i}", source_name=SOURCES[country],
                 country=country, lang="en", views=(i + 1) * 37, like_count=i * 3,
                 created_at=now - timedelta(hours=b_i * 3 + i),
@@ -91,7 +91,7 @@ def seed():
             item.translate_status = "done"
             item.translated_at = now
             item.title_ko = "[샘플] 해외 언론이 본 한국 #1"
-            item.summary_ko = "번역 버튼을 누르면 이 자리에 원문 기사를 500자 이내로 요약한 내용이 들어갑니다."
+            item.summary_ko = "번역 버튼을 누르면 이 자리에 원문 본문 전체의 번역이 들어갑니다."
             item.category_ko = item.category_hint
         db.session.add(item)
         n += 1

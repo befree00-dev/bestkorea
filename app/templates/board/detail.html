@@ -42,12 +42,7 @@
       {% for r in post.reactions %}
       <li>
         <div class="r-meta"><span class="r-author">{{ r.author }}</span><span class="r-score">▲ {{ r.score }}</span></div>
-        {% if r.body_ko %}
-          <p class="r-ko">{{ r.body_ko }}</p>
-          <details><summary>원문</summary><p class="r-orig">{{ r.body }}</p></details>
-        {% else %}
-          <p class="r-orig">{{ r.body }}</p>
-        {% endif %}
+        {% if r.body_ko %}<p class="r-ko">{{ r.body_ko|nl2br }}</p>{% else %}<p class="r-orig">{{ r.body|nl2br }}</p>{% endif %}
       </li>
       {% endfor %}
     </ul>

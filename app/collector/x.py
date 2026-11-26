@@ -96,7 +96,7 @@ def search_candidates(cfg, session, errors):
     candidates = []
     for t in data.get("data", []):
         replies = (t.get("public_metrics") or {}).get("reply_count", 0)
-        text = clean_text(t.get("text"))
+        text = clean_text(t.get("text"), keep_lines=True)
         if replies < cfg["MIN_COMMENTS"] or (t.get("lang") or "").startswith("ko") or mostly_korean(text):
             continue
         user = users.get(t.get("author_id")) or {}
@@ -122,7 +122,7 @@ def fetch_comments(cfg, session, item):
     users, _ = _users_and_media(data)
     out = []
     for t in data.get("data", []):
-        body = clean_text(_strip_mentions(t.get("text")), COMMENT_LIMIT)
+        body = clean_text(_strip_mentions(t.get("text")), COMMENT_LIMIT, keep_lines=True)
         if not body:
             continue
         user = users.get(t.get("author_id")) or {}
