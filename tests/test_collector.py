@@ -420,3 +420,141 @@ def test_import_reports_hidden_tab(app, client):
     payload["debug"] = {"v": 4, "stop": "idle", "articles": 11, "hidden": True, "logged_in": True}
     r = client.post("/desk/import", data={"site": "x", "payload": json.dumps(payload)}, follow_redirects=True)
     assert "읽는 도중 탭이 가려졌습니다" in r.get_data(as_text=True)
+
+
+# ------------------------------------------------------------------ Reddit 사진 (갤러리·크로스포스트·서버 복사)
+@pytest.fixture(autouse=True)
+def no_remote_image_copy(monkeypatch):
+    """테스트에서는 외부 이미지를 실제로 내려받지 않음 (필요한 테스트에서 따로 바꿈)."""
+    import app.uploads
+
+    monkeypatch.setattr(app.uploads, "copy_remote_image", lambda url: None)
+
+
+def reddit_gallery_json(**post_extra):
+    post = dict(id="gal123", title="Photos from my Korea trip", subreddit="korea",
+                permalink="/r/korea/comments/gal123/photos/", num_comments=25, is_self=False, selftext="",
+                url="https://www.reddit.com/gallery/gal123", is_gallery=True, created_utc=1764100000,
+                gallery_data={"items": [{"media_id": "second"}, {"media_id": "first"}]},
+                media_metadata={
+                    "first": {"status": "valid", "e": "Image", "s": {"u": "https://preview.redd.it/b.jpg?width=1080&amp;s=2"}},
+                    "second": {"status": "valid", "e": "Image", "s": {"u": "https://preview.redd.it/a.jpg?width=1080&amp;s=1"}},
+                })
+    post.update(post_extra)
+    comments = [{"kind": "t1", "data": {"author": f"u{i}", "body": f"nice {i}", "score": i}} for i in range(3)]
+    return json.dumps([{"data": {"children": [{"kind": "t3", "data": post}]}}, {"data": {"children": comments}}])
+
+
+def test_reddit_gallery_first_image_in_order():
+    item, external = parse("reddit", reddit_gallery_json(), 10, 50)
+    assert item.image_url == "https://preview.redd.it/a.jpg?width=1080&s=1"  # gallery_data 순서의 첫 장, &amp; 풀기
+    assert external is None  # 갤러리 주소는 '관련 기사'가 아님
+
+
+def test_reddit_crosspost_image():
+    parent = {"url": "https://i.redd.it/parent.jpeg", "is_self": False}
+    item, _ = parse("reddit", reddit_gallery_json(is_gallery=False, gallery_data=None, media_metadata=None,
+                                                  url="https://www.reddit.com/r/pics/comments/x/y/",
+                                                  crosspost_parent_list=[parent]), 10, 50)
+    assert item.image_url == "https://i.redd.it/parent.jpeg"
+
+
+def test_import_copies_image_and_prefills_body(app, client, monkeypatch):
+    import app.uploads
+
+    copied = []
+    monkeypatch.setattr(app.uploads, "copy_remote_image", lambda url: copied.append(url) or "/uploads/copied.jpg")
+    _staff_client(client)
+    r = client.post("/desk/import", data={"site": "reddit", "payload": reddit_gallery_json()}, follow_redirects=True)
+    assert "사진 있음" in r.get_data(as_text=True)
+    item = CollectedItem.query.one()
+    assert copied == ["https://preview.redd.it/a.jpg?width=1080&s=1"] and item.image_url == "/uploads/copied.jpg"
+    # 게시판에 올리기: 본문 맨 위에 사진, 대표 이미지(썸네일)도 같은 사진
+    html = client.get(f"/write?from_item={item.id}").get_data(as_text=True)
+    assert "\n![](/uploads/copied.jpg)</textarea>" in html  # 본문이 없는 갤러리 글: 사진 한 줄
+    assert 'name="image_url" placeholder="https:// 또는 /uploads/…" type="text" value="/uploads/copied.jpg"' in html
+    # 그대로 등록하면 대표 이미지(썸네일)와 본문 사진으로 저장됨
+    r = client.post("/write", data=dict(board="society", title="여행 사진", body="![](/uploads/copied.jpg)", country="",
+                                        image_url="/uploads/copied.jpg", from_item=str(item.id), r_count="0"))
+    assert r.status_code == 302
+    from app.models import Post as P
+    post = P.query.one()
+    assert post.image_url == "/uploads/copied.jpg" and post.body.startswith("![](/uploads/copied.jpg)")
+
+
+def test_import_keeps_remote_url_when_copy_fails(app, client):
+    _staff_client(client)
+    r = client.post("/desk/import", data={"site": "reddit", "payload": reddit_gallery_json()}, follow_redirects=True)
+    assert "원래 주소를 그대로" in r.get_data(as_text=True)
+    assert CollectedItem.query.one().image_url.startswith("https://preview.redd.it/")
+
+
+def test_copy_remote_image(app, tmp_path, monkeypatch):
+    import io
+
+    import requests
+    from PIL import Image
+
+    import app.uploads as up
+    from app.collector import translate as trmod
+
+    app.config.update(UPLOAD_FOLDER=str(tmp_path))
+    buf = io.BytesIO()
+    Image.new("RGB", (30, 20), (1, 2, 3)).save(buf, "JPEG")
+
+    class Resp:
+        def __init__(self, ctype, body=b""):
+            self.status_code, self.headers, self.is_redirect = 200, {"Content-Type": ctype}, False
+            self.raw = io.BytesIO(body)
+            self.raw.read = (lambda f: (lambda n, decode_content=True: f(n)))(self.raw.read)
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(trmod, "is_public_http_url", lambda u: "internal" not in u)
+    monkeypatch.setattr(requests.Session, "get", lambda self, url, **kw: Resp(
+        "image/jpeg" if url.endswith(".jpg") else "text/html", buf.getvalue()))
+    real = up.__dict__["copy_remote_image"] if "copy_remote_image" in up.__dict__ else None
+    from importlib import reload
+    reload(up)  # 위 autouse 가 바꾼 함수 대신 실제 함수
+    url = up.copy_remote_image("https://i.redd.it/photo.jpg")
+    assert url.startswith("/uploads/") and (tmp_path / url.rsplit("/", 1)[1]).exists()
+    assert up.copy_remote_image("https://example.com/page") is None  # 이미지가 아님
+    assert up.copy_remote_image("http://internal/x.jpg") is None  # 내부망 차단
+    del real
+
+
+def test_post_shows_body_image_once(client, user):
+    from app.models import Post as P
+
+    p = P(board="society", title="사진 글", body="![](/uploads/one.jpg)\n\n본문", image_url="/uploads/one.jpg",
+          user_id=user.id)
+    db.session.add(p)
+    db.session.commit()
+    html = client.get(f"/b/society/{p.id}").get_data(as_text=True)
+    assert html.count('src="/uploads/one.jpg"') == 1  # 위쪽 대표 이미지 칸에 중복 표시하지 않음
+    listing = client.get("/b/society").get_data(as_text=True)
+    assert 'class="thumb" src="/uploads/one.jpg"' in listing  # 목록 썸네일
+
+
+def test_prefill_puts_image_above_text(app, client):
+    from app.models import CollectedItem as CI
+
+    _staff_client(client)
+    item = CI(source_type="reddit", url="https://www.reddit.com/r/korea/comments/t1/x/", title="t", snippet="Original",
+              summary_ko="번역 본문", translate_status="done", image_url="/uploads/p.jpg", country=None, comments=[])
+    yt = CI(source_type="youtube", url="https://www.youtube.com/watch?v=abcdefghijk", title="v", snippet="desc",
+            image_url="https://i.ytimg.com/vi/abcdefghijk/hqdefault.jpg", comments=[])
+    db.session.add_all([item, yt])
+    db.session.commit()
+    assert "\n![](/uploads/p.jpg)\n\n번역 본문</textarea>" in client.get(f"/write?from_item={item.id}").get_data(as_text=True)
+    assert "![](" not in client.get(f"/write?from_item={yt.id}").get_data(as_text=True).split('id="body"')[1].split("</textarea>")[0]
+
+
+def test_image_field_rejects_unsafe_values(app, client):
+    from app.models import User
+    u = User(username="rr", email="rr@example.com", role="reporter"); u.set_password("password123")
+    db.session.add(u); db.session.commit()
+    client.post("/login", data={"email": "rr@example.com", "password": "password123"})
+    r = client.post("/write", data=dict(board="society", title="제목", body="본문", country="", image_url="javascript:alert(1)"))
+    assert r.status_code == 200 and "이미지 주소만" in r.get_data(as_text=True)

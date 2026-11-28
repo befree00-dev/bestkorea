@@ -34,7 +34,7 @@
       <legend>해외 반응 글 정보</legend>
       {{ field(form.source_url, placeholder='https://') }}
       {{ field(form.country) }}
-      {{ field(form.image_url, placeholder='https://', hint='원문 기사의 대표 이미지. 저작권을 확인한 뒤 사용하세요.') }}
+      {{ field(form.image_url, placeholder='https:// 또는 /uploads/…', hint='목록 썸네일로 쓰이는 대표 이미지. 저작권을 확인한 뒤 사용하세요.') }}
       {% if form.image_url.data %}<img class="preview-img" src="{{ form.image_url.data }}" alt="대표 이미지 미리보기" referrerpolicy="no-referrer">{% endif %}
     </fieldset>
     {% include "partials/reaction_editor.html" %}

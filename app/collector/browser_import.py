@@ -120,14 +120,44 @@ def parse(site, text, min_comments, max_comments):
 
 
 # ------------------------------------------------------------------ Reddit
+IMAGE_EXT_RE = re.compile(r"\.(jpe?g|png|gif|webp)(\?.*)?$", re.I)
+
+
+def _reddit_images(post):
+    """Reddit 글의 사진 주소 목록 (순서대로). 갤러리·크로스포스트·미리보기·이미지 링크를 모두 확인."""
+    sources = [post] + [p for p in (post.get("crosspost_parent_list") or []) if isinstance(p, dict)]
+    urls = []
+
+    def add(u):
+        if isinstance(u, str) and u.startswith("https://"):
+            u = html.unescape(u)
+            if u not in urls:
+                urls.append(u)
+
+    for src in sources:
+        # 1) 갤러리(여러 장): gallery_data 순서대로, 실제 이미지는 media_metadata 에 있음
+        meta = src.get("media_metadata") or {}
+        for it in (src.get("gallery_data") or {}).get("items") or []:
+            m = meta.get(it.get("media_id")) or {}
+            if m.get("status", "valid") != "valid":
+                continue
+            best = m.get("s") or {}
+            add(best.get("u") or best.get("gif"))
+        # 2) 이미지 파일 링크 (i.redd.it, i.imgur.com 등)
+        direct = src.get("url_overridden_by_dest") or src.get("url") or ""
+        if IMAGE_EXT_RE.search(direct):
+            add(direct)
+        # 3) 미리보기 이미지 (링크 글·동영상 글의 대표 이미지)
+        try:
+            add(src["preview"]["images"][0]["source"]["url"])
+        except (KeyError, IndexError, TypeError):
+            pass
+    return urls
+
+
 def _reddit_image(post):
-    url = post.get("url_overridden_by_dest") or post.get("url") or ""
-    if re.search(r"\.(jpe?g|png|gif|webp)$", url, re.I):
-        return url
-    try:
-        return html.unescape(post["preview"]["images"][0]["source"]["url"])
-    except (KeyError, IndexError, TypeError):
-        return None
+    images = _reddit_images(post)
+    return images[0] if images else None
 
 
 def parse_reddit(text, min_comments, max_comments):
@@ -160,8 +190,8 @@ def parse_reddit(text, min_comments, max_comments):
     external = None
     if not post.get("is_self"):
         external = post.get("url_overridden_by_dest") or post.get("url")
-        if external and ("reddit.com" in external or "redd.it" in external or external == _reddit_image(post)
-                         or not external.startswith(("http://", "https://"))):
+        if external and ("reddit.com" in external or "redd.it" in external or external in _reddit_images(post)
+                         or IMAGE_EXT_RE.search(external) or not external.startswith(("http://", "https://"))):
             external = None
 
     title = clean_text(post.get("title"), 300)

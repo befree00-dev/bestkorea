@@ -66,6 +66,38 @@ def save_image(data, folder):
     return name
 
 
+def copy_remote_image(url):
+    """외부 이미지(Reddit·X 등)를 내려받아 /uploads 에 저장하고 '/uploads/…' 주소를 돌려준다.
+    원본 주소가 나중에 끊겨도 썸네일·본문 이미지가 유지되도록. 실패하면 None (원래 주소를 그대로 씀)."""
+    import requests
+    from urllib.parse import urljoin
+
+    from .collector.translate import is_public_http_url
+
+    cfg = current_app.config
+    session = requests.Session()
+    session.headers["User-Agent"] = cfg["ARTICLE_USER_AGENT"]
+    try:
+        for _ in range(4):
+            if not is_public_http_url(url):  # 내부망 주소 차단
+                return None
+            resp = session.get(url, timeout=15, allow_redirects=False, stream=True)
+            if resp.is_redirect:
+                url = urljoin(url, resp.headers.get("Location", ""))
+                resp.close()
+                continue
+            if resp.status_code != 200 or not resp.headers.get("Content-Type", "").startswith("image/"):
+                resp.close()
+                return None
+            data = resp.raw.read(cfg["MAX_IMAGE_BYTES"] + 1, decode_content=True)
+            resp.close()
+            name = save_image(data, cfg["UPLOAD_FOLDER"])  # 크기·형식 검사, 메타데이터 제거, 축소
+            return f"/uploads/{name}"
+    except (requests.RequestException, UploadError, OSError):
+        return None
+    return None
+
+
 @bp.route("/upload/image", methods=["POST"])
 @login_required
 def upload_image():

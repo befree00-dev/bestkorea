@@ -117,10 +117,21 @@ def import_page():
         except ImportError_ as exc:
             flash(str(exc), "danger")
             return redirect(url_for("desk.import_page"))
+        image_note = ""
+        if site in ("reddit", "x") and item.image_url and not CollectedItem.query.filter_by(url=item.url).first():
+            from .uploads import copy_remote_image
+
+            local = copy_remote_image(item.image_url)
+            if local:
+                item.image_url = local
+            else:
+                image_note = " 사진을 서버로 복사하지 못해 원래 주소를 그대로 씁니다."
         row, created = save_item(item, article_url)
         if created:
             note = read_note(site, payload, item) or f"댓글 {len(item.reactions)}개"
-            flash(f"{SITE_NAMES[site]} 글을 수집함에 추가했습니다 ({note}). 번역을 눌러 보세요.", "success")
+            if item.image_url:
+                note += ", 사진 있음"
+            flash(f"{SITE_NAMES[site]} 글을 수집함에 추가했습니다 ({note}). 번역을 눌러 보세요.{image_note}", "success")
         else:
             flash("이미 수집함에 있는 글입니다.", "info")
         return redirect(url_for("desk.item", item_id=row.id))

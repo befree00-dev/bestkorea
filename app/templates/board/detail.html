@@ -22,7 +22,7 @@
 
   {% set yt = post.source_url|youtube_id %}
   {% if yt %}<div class="video"><iframe src="https://www.youtube-nocookie.com/embed/{{ yt }}" title="YouTube 영상" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>
-  {% elif post.image_url %}<figure class="article-image"><img src="{{ post.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer"></figure>{% endif %}
+  {% elif post.image_url and ('](' ~ post.image_url ~ ')') not in (post.body or '') %}<figure class="article-image"><img src="{{ post.image_url }}" alt="" loading="lazy" referrerpolicy="no-referrer"></figure>{% endif %}
 
   {% if post.body %}<div class="article-body">{{ post.body|render_body }}</div>{% endif %}
 

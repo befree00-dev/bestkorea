@@ -45,7 +45,12 @@ class PostForm(FlaskForm):
         "출처 지역", choices=[("", "선택 안 함")] + [(k, f"{v[1]} {v[0]}") for k, v in COUNTRIES.items()],
         validators=[Optional()],
     )
-    image_url = URLField("대표 이미지 주소", validators=[Optional(), URL(), Length(max=2000)])
+    image_url = StringField("대표 이미지 (썸네일)", validators=[Optional(), Length(max=2000)])
+
+    def validate_image_url(self, field):
+        value = (field.data or "").strip()
+        if value and not (value.startswith("/uploads/") or value.startswith("https://") or value.startswith("http://")):
+            raise ValidationError("이 사이트에 올린 이미지(/uploads/…)나 https:// 로 시작하는 이미지 주소만 쓸 수 있습니다.")
     from_item = HiddenField()
 
 

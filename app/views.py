@@ -131,7 +131,10 @@ def _prefill_from_item(form, item):
     board = item.category_ko or item.category_hint
     form.board.data = board if board in NEWS_BOARDS else "fun"
     form.title.data = item.title_ko or item.title
-    form.body.data = item.summary_ko or item.snippet or ""
+    body = item.summary_ko or item.snippet or ""
+    if item.image_url and item.source_type != "youtube":  # 첫 번째 사진을 본문 맨 위에 (YouTube 는 영상이 들어감)
+        body = f"![]({item.image_url})\n\n{body}".rstrip()
+    form.body.data = body
     form.source_url.data = item.url if item.source_type == "reddit" else (item.resolved_url or item.url)
     form.country.data = item.country
     form.image_url.data = item.image_url or ""
